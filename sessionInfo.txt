@@ -1,0 +1,56 @@
+R version 4.5.1 (2025-06-13 ucrt)
+Platform: x86_64-w64-mingw32/x64
+Running under: Windows 10 x64 (build 19045)
+
+Matrix products: default
+  LAPACK version 3.12.1
+
+locale:
+[1] LC_COLLATE=English_United States.utf8  LC_CTYPE=English_United States.utf8   
+[3] LC_MONETARY=English_United States.utf8 LC_NUMERIC=C                          
+[5] LC_TIME=English_United States.utf8    
+
+time zone: Africa/Nairobi
+tzcode source: internal
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] car_3.1-3             carData_3.0-5         fmesher_0.5.0        
+ [4] INLA_25.06.07         Matrix_1.7-3          gbm_2.2.2            
+ [7] writexl_1.5.4         corrr_0.4.5           moments_0.14.1       
+[10] purrr_1.1.0           tidyr_1.3.1           timeROC_0.4          
+[13] pROC_1.19.0.1         corrplot_0.95         ggplot2_3.5.2        
+[16] Hmisc_5.2-3           pec_2025.06.24        prodlim_2025.04.28   
+[19] randomForestSRC_3.4.1 survival_3.8-3        dplyr_1.1.4          
+[22] haven_2.5.5           e1071_1.7-17          jsonlite_2.0.0       
+[25] exactextractr_0.10.1  sf_1.0-21             terra_1.8-60         
+
+loaded via a namespace (and not attached):
+ [1] DBI_1.2.3           gridExtra_2.3       rlang_1.1.6        
+ [4] magrittr_2.0.3      compiler_4.5.1      vctrs_0.6.5        
+ [7] stringr_1.5.1       pkgconfig_2.0.3     fastmap_1.2.0      
+[10] backports_1.5.0     rmarkdown_2.29      tzdb_0.5.0         
+[13] xfun_0.52           timereg_2.0.7       parallel_4.5.1     
+[16] data.tree_1.2.0     cluster_2.1.8.1     R6_2.6.1           
+[19] stringi_1.8.7       RColorBrewer_1.1-3  parallelly_1.45.1  
+[22] rpart_4.1.24        numDeriv_2016.8-1.1 Rcpp_1.1.0         
+[25] iterators_1.0.14    knitr_1.50          future.apply_1.20.0
+[28] base64enc_0.1-3     readr_2.1.5         splines_4.5.1      
+[31] nnet_7.3-20         tidyselect_1.2.1    abind_1.4-8        
+[34] rstudioapi_0.17.1   yaml_2.3.10         codetools_0.2-20   
+[37] listenv_0.9.1       lattice_0.22-7      tibble_3.3.0       
+[40] withr_3.0.2         evaluate_1.0.4      foreign_0.8-90     
+[43] future_1.67.0       units_0.8-7         proxy_0.4-27       
+[46] pillar_1.11.0       DiagrammeR_1.0.11   KernSmooth_2.23-26 
+[49] checkmate_2.3.3     foreach_1.5.2       generics_0.1.4     
+[52] sp_2.2-0            hms_1.1.3           scales_1.4.0       
+[55] globals_0.18.0      class_7.3-23        glue_1.8.0         
+[58] tools_4.5.1         data.table_1.17.8   forcats_1.0.0      
+[61] visNetwork_2.1.4    mvtnorm_1.3-3       grid_4.5.1         
+[64] colorspace_2.1-2    raster_3.6-32       htmlTable_2.4.3    
+[67] Formula_1.2-5       cli_3.6.5           lava_1.8.1         
+[70] gtable_0.3.6        digest_0.6.37       classInt_0.4-11    
+[73] htmlwidgets_1.6.4   farver_2.1.2        htmltools_0.5.8.1  
+[76] lifecycle_1.0.4    
