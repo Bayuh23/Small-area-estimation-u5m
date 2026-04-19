@@ -1,0 +1,41 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  Small Area Estimation of Under‑Five Mortality at 5 km
+  Resolution – Covariate and Censoring Pipelines
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Bayuh Asmamaw
+    family-names: Hailu
+    name-particle: Bayuh
+    email: bayuhasmamaw@gmail.com
+    affiliation: >-
+      Statistician and Spatial Analyst, Research Center for
+      Inclusive Development in Africa (RIDA); Monitoring and
+      Evaluation, Wollo University
+    orcid: 'https://orcid.org/0000-0002-7810-2774'
+repository-code: 'https://github.com/Bayuh23/Small-area-estimation-u5m.git'
+abstract: >-
+  This repository contains two R Markdown scripts for small
+  area estimation of under-five mortality at 5 km
+  resolution. The first script selects uncorrelated
+  covariates and adjusts DHS birth histories for informative
+  censoring using Random Survival Forest. The second script
+  processes 16 selected covariates into 5 km GeoTIFFs.
+  Example outputs and covariate rasters are archived on
+  Zenodo.
+keywords:
+  - >-
+    small area estimation, under-five mortality, covariate
+    selection, censoring adjustment, Random Survival Forest,
+    INLA, data integration, multi-source data, climate data,
+    environmental covariates, GBD, DHS, spatial analysis, 5
+    km resolution, rescaling, standardisation
+license: MIT
+version: 1.0.0
+date-released: '2026-04-19'
