@@ -1,0 +1,2637 @@
+---
+title: "Untitled"
+output: html_document
+date: "2026-01-06"
+---
+
+# Covariate Preparation Pipeline for 5 km Under‑Five Mortality Mapping in (2000‑2015)
+
+IMPORTANT – RAW DATA NOT INCLUDED, BUT PROCESSED OUTPUTS FOR ALL YEARS (2000‑2015) ARE PROVIDED
+
+This script processes freely available raw rasters (ERA5, GBD, MODIS, WorldPop, Malaria Atlas Project, etc.). These raw data are NOT included in this deposit due to their large size. The folder paths (e.g., D:/new resea/Ethiopia/...) reflect the author’s local machine; users must download the raw data themselves and adjust the paths if they wish to re‑run the script.
+
+However, the final outputs of this script – adjusted covariates (21 variables reduced to 16 after correlation filtering), 5 km population rasters, and inhabited area masks for ALL years 2000‑2015 – ARE included in this deposit under the `adjusted_covariates/` folder. These ready‑to‑use GeoTIFFs can be directly employed in downstream analyses (e.g., censoring adjustment or INLA modelling) without re‑running the script.
+
+The script is shared for methodological transparency and to document every processing step (log1p, z‑score, capping, metadata generation). Users who wish to reproduce the entire workflow or process additional years can do so after obtaining the raw data and modifying the file paths.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Covariate Preparation Pipeline for 5 km Under‑Five Mortality Mapping in Ethiopia (2000‑2015)
+
+# Dignosis for transformation decation 
+
+```{r}
+folder_path <- "D:/new resea/Ethiopia/ERA5 Ethiopia/dewpoi_temp_2m"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (dewPoi_00.tif to dewPoi_19.tif)
+files <- sprintf("dewPoi_%02d.tif", 0:19)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_dewpoint <- rast(rasters)
+# Pool all values into a single vector
+values_dewpoint <- values(stack_dewpoint, mat = FALSE)
+values_dewpoint <- values_dewpoint[!is.na(values_dewpoint)]
+# Compute diagnostics
+mean_val <- mean(values_dewpoint)
+median_val <- median(values_dewpoint)
+min_val <- min(values_dewpoint)
+max_val <- max(values_dewpoint)
+skew_val <- skewness(values_dewpoint)
+percent_zeros <- sum(values_dewpoint == 0)/length(values_dewpoint) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "dewpoint_temp_2m",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "DewPoint_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/deareha"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (2000–2017 -> dear_et_00.tif to dear_et_17.tif)
+files <- sprintf("dear_et_%02d.tif", 0:17)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_deareha <- rast(rasters)
+# Pool all values into a single vector
+values_deareha <- values(stack_deareha, mat = FALSE)
+values_deareha <- values_deareha[!is.na(values_deareha)]
+# Compute diagnostics
+mean_val <- mean(values_deareha)
+median_val <- median(values_deareha)
+min_val <- min(values_deareha)
+max_val <- max(values_deareha)
+skew_val <- skewness(values_deareha)
+percent_zeros <- sum(values_deareha == 0)/length(values_deareha) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "deareha",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "Dear_Diagnosis_2000_2017.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/ERA5 Ethiopia/solarradationdown"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (rad_00.tif to rad_19.tif)
+files <- sprintf("rad_%02d.tif", 0:19)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_solar <- rast(rasters)
+# Pool all values into a single vector
+values_solar <- values(stack_solar, mat = FALSE)
+values_solar <- values_solar[!is.na(values_solar)]
+# Compute diagnostics
+mean_val <- mean(values_solar)
+median_val <- median(values_solar)
+min_val <- min(values_solar)
+max_val <- max(values_solar)
+skew_val <- skewness(values_solar)
+percent_zeros <- sum(values_solar == 0)/length(values_solar) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "solarradationdown",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "SolarRad_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/ERA5 Ethiopia/potentialevaporation"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (evap_00.tif to evap_19.tif)
+files <- sprintf("evap_%02d.tif", 0:19)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_evap <- rast(rasters)
+# Pool all values into a single vector
+values_evap <- values(stack_evap, mat = FALSE)
+values_evap <- values_evap[!is.na(values_evap)]
+# Compute diagnostics
+mean_val <- mean(values_evap)
+median_val <- median(values_evap)
+min_val <- min(values_evap)
+max_val <- max(values_evap)
+skew_val <- skewness(values_evap)
+percent_zeros <- sum(values_evap == 0)/length(values_evap) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "potentialevaporation",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "Evaporation_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/ERA5 Ethiopia/runoff"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (run_00.tif to run_19.tif)
+files <- sprintf("run_%02d.tif", 0:19)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_runoff <- rast(rasters)
+# Pool all values into a single vector
+values_runoff <- values(stack_runoff, mat = FALSE)
+values_runoff <- values_runoff[!is.na(values_runoff)]
+# Compute diagnostics
+mean_val <- mean(values_runoff)
+median_val <- median(values_runoff)
+min_val <- min(values_runoff)
+max_val <- max(values_runoff)
+skew_val <- skewness(values_runoff)
+percent_zeros <- sum(values_runoff == 0)/length(values_runoff) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "runoff",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "Runoff_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/NDVI Ethiopia"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (NDVI_2000_Ethiopia.tif to NDVI_2019_Ethiopia.tif)
+years <- 2000:2019
+files <- sprintf("NDVI_%d_Ethiopia.tif", years)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_ndvi <- rast(rasters)
+# Pool all values into a single vector
+values_ndvi <- values(stack_ndvi, mat = FALSE)
+values_ndvi <- values_ndvi[!is.na(values_ndvi)]
+# Compute diagnostics
+mean_val <- mean(values_ndvi)
+median_val <- median(values_ndvi)
+min_val <- min(values_ndvi)
+max_val <- max(values_ndvi)
+skew_val <- skewness(values_ndvi)
+percent_zeros <- sum(values_ndvi == 0)/length(values_ndvi) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "NDVI",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "NDVI_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/pm2.5"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (pm25_et_00.tif to pm25_et_19.tif)
+files <- sprintf("pm25_et_%02d.tif", 0:19)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_pm25 <- rast(rasters)
+# Pool all values into a single vector
+values_pm25 <- values(stack_pm25, mat = FALSE)
+values_pm25 <- values_pm25[!is.na(values_pm25)]
+# Compute diagnostics
+mean_val <- mean(values_pm25)
+median_val <- median(values_pm25)
+min_val <- min(values_pm25)
+max_val <- max(values_pm25)
+skew_val <- skewness(values_pm25)
+percent_zeros <- sum(values_pm25 == 0)/length(values_pm25) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "PM2.5",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "PM25_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/malaria"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (malar_et_00.tif to malar_et_18.tif)
+files <- sprintf("malar_et_%02d.tif", 0:18)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_malaria <- rast(rasters)
+# Pool all values into a single vector
+values_malaria <- values(stack_malaria, mat = FALSE)
+values_malaria <- values_malaria[!is.na(values_malaria)]
+# Compute diagnostics
+mean_val <- mean(values_malaria)
+median_val <- median(values_malaria)
+min_val <- min(values_malaria)
+max_val <- max(values_malaria)
+skew_val <- skewness(values_malaria)
+percent_zeros <- sum(values_malaria == 0)/length(values_malaria) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "malaria",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "Malaria_Diagnosis_2000_2018.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+folder_path <- "D:/new resea/Ethiopia/deareha"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (dear_et_00.tif to dear_et_17.tif)
+files <- sprintf("dear_et_%02d.tif", 0:17)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_deareha <- rast(rasters)
+# Pool all values into a single vector
+values_deareha <- values(stack_deareha, mat = FALSE)
+values_deareha <- values_deareha[!is.na(values_deareha)]
+# Compute diagnostics
+mean_val <- mean(values_deareha)
+median_val <- median(values_deareha)
+min_val <- min(values_deareha)
+max_val <- max(values_deareha)
+skew_val <- skewness(values_deareha)
+percent_zeros <- sum(values_deareha == 0)/length(values_deareha) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "deareha",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "Dear_Diagnosis_2000_2017.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# arameters
+folder_path <- "D:/new resea/Ethiopia/HIV"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (HIV_ETH_00.tif to HIV_ETH_19.tif)
+files <- sprintf("HIV_ETH_%02d.tif", 0:19)
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+file_paths <- file_paths[file.exists(file_paths)]
+# Load first layer of each raster safely
+rasters <- lapply(file_paths, function(f){
+  r <- rast(f, lyrs = 1)
+  return(r)
+})
+# Stack rasters
+stack_hiv <- rast(rasters)
+# Pool all values into a single vector
+values_hiv <- values(stack_hiv, mat = FALSE)
+values_hiv <- values_hiv[!is.na(values_hiv)]
+# Compute diagnostics
+mean_val <- mean(values_hiv)
+median_val <- median(values_hiv)
+min_val <- min(values_hiv)
+max_val <- max(values_hiv)
+skew_val <- skewness(values_hiv)
+percent_zeros <- sum(values_hiv == 0)/length(values_hiv) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "HIV",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "HIV_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/Sever wasting"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (SW 2000.tif to SW 2019.tif)
+years <- 2000:2019
+files <- sprintf("SW %d.tif", years)   # note the space instead of underscore
+file_paths <- file.path(folder_path, files)
+# Keep only existing files
+existing_files <- file_paths[file.exists(file_paths)]
+if(length(existing_files) == 0){
+  stop("No raster files found in folder: ", folder_path)
+}
+# Load first layer safely
+rasters <- lapply(existing_files, function(f){
+  rast(f, lyrs = 1)
+})
+# Stack rasters
+stack_sw <- rast(rasters)
+# Pool all values into a single vector
+values_sw <- values(stack_sw, mat = FALSE)
+values_sw <- values_sw[!is.na(values_sw)]
+# Compute diagnostics
+mean_val <- mean(values_sw)
+median_val <- median(values_sw)
+min_val <- min(values_sw)
+max_val <- max(values_sw)
+skew_val <- skewness(values_sw)
+percent_zeros <- sum(values_sw == 0)/length(values_sw) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "Severe Wasting",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "SevereWasting_Diagnosis_2000_2019.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/dpt3"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (DPT3_ET_00.tif to DPT3_ET_16.tif)
+files <- sprintf("DPT3_ET_%02d.tif", 0:16)
+file_paths <- file.path(folder_path, files)
+
+# Keep only existing files
+existing_files <- file_paths[file.exists(file_paths)]
+if(length(existing_files) == 0){
+  stop("No raster files found in folder: ", folder_path)
+}
+# Load first layer safely
+rasters <- lapply(existing_files, function(f){
+  rast(f, lyrs = 1)
+})
+# Stack rasters
+stack_dpt3 <- rast(rasters)
+# Pool all values into a single vector
+values_dpt3 <- values(stack_dpt3, mat = FALSE)
+values_dpt3 <- values_dpt3[!is.na(values_dpt3)]
+# Compute diagnostics
+mean_val <- mean(values_dpt3)
+median_val <- median(values_dpt3)
+min_val <- min(values_dpt3)
+max_val <- max(values_dpt3)
+skew_val <- skewness(values_dpt3)
+percent_zeros <- sum(values_dpt3 == 0)/length(values_dpt3) * 100
+# Decide transformation based on pooled skewness
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+# Create diagnosis table
+diagnosis_table <- data.frame(
+  Covariate = "DPT3",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+# Save table
+output_file <- file.path(output_path, "DPT3_Diagnosis_2000_2016.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+# Parameters
+
+folder_path <- "D:/new resea/Ethiopia/wash"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+
+
+# Generate file paths explicitly (wash 2000.tif to wash 2017.tif)
+
+years <- 2000:2017
+files <- sprintf("wash %d.tif", years)   # note the space
+file_paths <- file.path(folder_path, files)
+
+# Keep only existing files
+existing_files <- file_paths[file.exists(file_paths)]
+if(length(existing_files) == 0){
+  stop("No raster files found in folder: ", folder_path)
+}
+
+
+# Load first layer safely
+
+rasters <- lapply(existing_files, function(f){
+  rast(f, lyrs = 1)
+})
+
+# Stack rasters
+stack_wash <- rast(rasters)
+
+
+# Pool all values into a single vector
+
+values_wash <- values(stack_wash, mat = FALSE)
+values_wash <- values_wash[!is.na(values_wash)]
+
+
+# Compute diagnostics
+
+mean_val <- mean(values_wash)
+median_val <- median(values_wash)
+min_val <- min(values_wash)
+max_val <- max(values_wash)
+skew_val <- skewness(values_wash)
+percent_zeros <- sum(values_wash == 0)/length(values_wash) * 100
+
+
+# Decide transformation based on pooled skewness
+
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+
+
+# Create diagnosis table
+
+diagnosis_table <- data.frame(
+  Covariate = "WASH",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+
+
+# Save table
+
+output_file <- file.path(output_path, "WASH_Diagnosis_2000_2017.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+library(terra)
+library(moments)
+# Parameters
+folder_path <- "D:/new resea/Ethiopia/water"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+# Generate file paths explicitly (water 2000.tif to water 2017.tif)
+years <- 2000:2017
+files <- sprintf("water %d.tif", years)   # note the space
+file_paths <- file.path(folder_path, files)
+
+# Keep only existing files
+existing_files <- file_paths[file.exists(file_paths)]
+if(length(existing_files) == 0){
+  stop("No raster files found in folder: ", folder_path)
+}
+
+
+# Load first layer safely
+
+rasters <- lapply(existing_files, function(f){
+  rast(f, lyrs = 1)
+})
+
+# Stack rasters
+stack_water <- rast(rasters)
+
+
+# Pool all values into a single vector
+
+values_water <- values(stack_water, mat = FALSE)
+values_water <- values_water[!is.na(values_water)]
+
+
+# Compute diagnostics
+
+mean_val <- mean(values_water)
+median_val <- median(values_water)
+min_val <- min(values_water)
+max_val <- max(values_water)
+skew_val <- skewness(values_water)
+percent_zeros <- sum(values_water == 0)/length(values_water) * 100
+
+
+# Decide transformation based on pooled skewness
+
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+
+
+# Create diagnosis table
+
+diagnosis_table <- data.frame(
+  Covariate = "Water",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+
+
+# Save table
+
+output_file <- file.path(output_path, "Water_Diagnosis_2000_2017.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+```{r}
+library(terra)
+library(moments)
+
+
+# Parameters
+
+folder_path <- "D:/new resea/Ethiopia/education"
+output_path <- "D:/new resea/Ethiopia/data managment/diagnose"
+dir.create(output_path, recursive = TRUE, showWarnings = FALSE)
+
+
+# Generate file paths explicitly (Educ_2000.tif to Educ_2017.tif)
+
+years <- 2000:2017
+files <- sprintf("Educ_%d.tif", years)
+file_paths <- file.path(folder_path, files)
+
+# Keep only existing files
+existing_files <- file_paths[file.exists(file_paths)]
+if(length(existing_files) == 0){
+  stop("No raster files found in folder: ", folder_path)
+}
+
+
+# Load first layer safely
+
+rasters <- lapply(existing_files, function(f){
+  rast(f, lyrs = 1)
+})
+
+# Stack rasters
+stack_educ <- rast(rasters)
+
+
+# Pool all values into a single vector
+
+values_educ <- values(stack_educ, mat = FALSE)
+values_educ <- values_educ[!is.na(values_educ)]
+
+
+# Compute diagnostics
+
+mean_val <- mean(values_educ)
+median_val <- median(values_educ)
+min_val <- min(values_educ)
+max_val <- max(values_educ)
+skew_val <- skewness(values_educ)
+percent_zeros <- sum(values_educ == 0)/length(values_educ) * 100
+
+
+# Decide transformation based on pooled skewness
+
+if(abs(skew_val) < 1){
+  rec <- "No transform"
+} else if(abs(skew_val) < 2){
+  rec <- "Usually no transform, inspect tail"
+} else if(abs(skew_val) < 3){
+  rec <- "Consider log1p or sqrt transform"
+} else {
+  rec <- "Strongly consider transform (log1p)"
+}
+
+
+# Create diagnosis table
+
+diagnosis_table <- data.frame(
+  Covariate = "Education",
+  Global_Mean = mean_val,
+  Global_Median = median_val,
+  Min = min_val,
+  Max = max_val,
+  Skewness = skew_val,
+  Percent_Zeros = percent_zeros,
+  Recommendation = rec,
+  stringsAsFactors = FALSE
+)
+
+
+# Save table
+
+output_file <- file.path(output_path, "Education_Diagnosis_2000_2017.csv")
+write.csv(diagnosis_table, output_file, row.names = FALSE)
+cat("Diagnosis table saved to:", output_file, "\n")
+```
+
+
+####################################################################################################################
+
+# COVARIATE PREPARATION PIPELINE FOR UNDER-FIVE MORTALITY PREDICTION
+
+### Night time lights (NTL – Binary Urban/Rural
+
+```{r}
+cat("\n=== Night-Time Lights 2000 PROCESSING (Binary Urban/Rural for INLA + SPDE) ===\n")
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD ETHIOPIA BOUNDARY (for masking)
+ethiopia_poly <- vect("D:/shap/ethiopia/gadm41_ETH_0.shp")
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Ethiopia boundary loaded and projected\n")
+
+# 3. LOAD RAW NIGHT-TIME LIGHT RASTER (2000)
+ntl_raw <- rast("D:/new resea/Ethiopia/nightlight/light 2000.tif")
+if(nlyr(ntl_raw) > 1) ntl_raw <- ntl_raw[[1]]
+cat("Raw NTL raster loaded\n")
+cat("Value range:", range(values(ntl_raw), na.rm=TRUE), "\n\n")
+
+# 4. PROJECT TO TEMPLATE CRS
+ntl_proj <- if(!same.crs(ntl_raw, template)) project(ntl_raw, template) else ntl_raw
+cat("Projection complete\n")
+
+# 5. RESAMPLE TO 5 KM TEMPLATE
+ntl_5km <- resample(ntl_proj, template, method="bilinear")
+cat("Resampled to 5km resolution\n")
+
+# 6. CROP + MASK TO ETHIOPIA
+ntl_crop <- crop(ntl_5km, ethiopia_poly_utm)
+ntl_clip <- mask(ntl_crop, ethiopia_poly_utm)
+cat("Clipped to Ethiopia boundary\n")
+
+# 7. CREATE BINARY URBAN VARIABLE
+# DN > 0 = 1 (urban)
+# DN = 0  = 0 (rural)
+ntl_binary <- classify(
+  ntl_clip,
+  rcl = matrix(c(-Inf, 0, 0,
+                 0, Inf, 1),
+               ncol=3, byrow=TRUE)
+)
+names(ntl_binary) <- "NTL_Urban_Binary"
+cat("Binary classification complete (0 = rural, 1 = urban)\n")
+
+# 8. FINAL CHECK
+ntl_vals <- values(ntl_binary)
+ntl_vals_nonNA <- ntl_vals[!is.na(ntl_vals)]
+
+cat("Valid pixels:", length(ntl_vals_nonNA), "\n")
+cat("Urban proportion:", mean(ntl_vals_nonNA), "\n\n")
+
+# 9. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/NTL00_5km_binary.tif"
+
+writeRaster(
+  ntl_binary,
+  filename = output_raster,
+  overwrite = TRUE,
+  gdal = "COMPRESS=LZW"
+)
+
+cat("Binary NTL raster saved:", output_raster, "\n")
+
+# 10. METADATA
+metadata <- list(
+  variable_name = "Night-Time Lights (Binary Urban/Rural)",
+  variable_code = "NTL00_5km_binary",
+  year = 2000,
+  country = "Ethiopia",
+  
+  source = "DMSP-OLS Night-Time Lights",
+  original_units = "Digital Number (DN)",
+  
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  
+  crs = as.character(crs(ntl_binary)),
+  resolution_m = paste(res(ntl_binary), collapse=" x "),
+  n_cells_total = ncell(ntl_binary),
+  n_cells_valid = length(ntl_vals_nonNA),
+  n_cells_missing = sum(is.na(ntl_vals)),
+  
+  classification_rule = "DN > 0 = 1 (urban), DN = 0 = 0 (rural)",
+  proportion_urban = mean(ntl_vals_nonNA),
+  proportion_rural = 1 - mean(ntl_vals_nonNA),
+  unique_values = sort(unique(ntl_vals_nonNA)),
+  
+  transformation = "none (binary classification)",
+  standardization = "none",
+  imputation = "none",
+  
+  inla_ready = TRUE,
+  spde_alignment_checked = TRUE
+)
+
+jsonlite::write_json(
+  metadata,
+  path = gsub(".tif$","_metadata.json",output_raster),
+  pretty = TRUE,
+  auto_unbox = TRUE
+)
+
+cat("Metadata saved\n")
+
+cat("=== Night-Time Lights 2000 PROCESSING COMPLETE ===\n")
+cat("Raster:", output_raster, "\n")
+cat("Metadata JSON:", gsub(".tif$","_metadata.json",output_raster), "\n")
+```
+
+
+###  Dewpoint Temperature at 2 meters above ground level (K)  ERA5 Unit: Kelvin (K)
+
+DEWPOINT TEMPERATURE COVARIATE PREPARATION
+For Bayesian Hierarchical Model with INLA + SPDE
+Target: Under-five mortality prediction at 5km resolution, Ethiopia 2000
+  Source: ERA5 Reanalysis Original units: Kelvin (K)
+Processing date: 2026-02-26
+
+```{r}
+cat("\n=== DEWPOINT (2m) PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+# 1. LOAD TEMPLATE AND STUDY AREA
+library(terra)
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+ethiopia_poly <- vect("D:/shap/ethiopia/gadm41_ETH_0.shp")
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW ERA5 DEWPOINT (Kelvin)
+dew_raw <- rast("D:/new resea/Ethiopia/ERA5 Ethiopia/dewpoi_temp_2m/dewPoi_00.tif")
+if (nlyr(dew_raw) > 1) dew_raw <- dew_raw[[1]]
+cat("Raw dewpoint loaded\n")
+
+# 3. PROJECT + RESAMPLE TO 5km GRID
+dew_proj <- if (!same.crs(dew_raw, template)) project(dew_raw, template) else dew_raw
+dew_5km <- resample(dew_proj, template, method = "bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 4. CLIP TO ETHIOPIA
+dew_crop <- crop(dew_5km, ethiopia_poly_utm)
+dew_clip <- mask(dew_crop, ethiopia_poly_utm)
+cat("Clipped to Ethiopia boundary\n")
+
+# 5. Z-SCORE STANDARDIZATION (Ethiopia pixels only)
+vals <- values(dew_clip)
+vals_eth <- vals[!is.na(vals)]
+vals_z <- (vals - mean(vals_eth)) / sd(vals_eth)
+values(dew_clip) <- vals_z
+cat("Standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 6. GEOMETRY CHECK
+geom_check <- compareGeom(dew_clip, template, stopOnError = FALSE)
+if (!geom_check) stop("Geometry mismatch with template.")
+cat("Geometry alignment: PASS\n")
+
+# 7. SAVE COVARIATE RASTER
+output_filename <- "eth_2000_dewpoint_5km_z.tif"
+output_path <- file.path("D:/new resea/Ethiopia/each year/2000/Adjusted_Raster", output_filename)
+writeRaster(dew_clip, filename = output_path, overwrite = TRUE, gdal = "COMPRESS=LZW")
+cat("Raster saved:", output_path, "\n")
+
+# 8. METADATA FOR COVARIATE STAGE ONLY
+metadata <- list(
+  variable_name = "Dewpoint Temperature at 2m",
+  variable_code = "dewpoint",
+  year = 2000,
+  country = "Ethiopia",
+  source = "ERA5 Reanalysis",
+  source_doi = "10.24381/cds.adbb2d47",
+  original_units = "Kelvin",
+  covariate_processing = list(
+    projection = "EPSG:32637 (UTM Zone 37N)",
+    resampling = "Bilinear",
+    masking = "Masked to Ethiopia national boundary",
+    missing_handling = "NA values retained; Ethiopia pixels used for standardization",
+    scaling = "Z-score standardization (mean=0, SD=1) based on Ethiopia pixels only"
+  ),
+  spatial_resolution_m = paste(round(res(dew_clip), 2), collapse = " x "),
+  crs = as.character(crs(dew_clip)),
+  n_cells = ncell(dew_clip),
+  processing_steps = "projected, resampled (bilinear), masked to Ethiopia, standardized (z-score)",
+  alignment_passed = geom_check,
+  processing_date = as.character(Sys.Date())
+)
+
+# Save metadata
+jsonlite::write_json(
+  metadata, 
+  path = gsub(".tif$", "_metadata.json", output_path),
+  pretty = TRUE,
+  auto_unbox = TRUE
+)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== COVARIATE PREPARATION COMPLETE ===\n")
+```
+
+
+# malaria prevalence / risk
+
+```{r}
+cat("\n=== MALARIA PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+library(terra)
+library(e1071)
+
+# 1. LOAD TEMPLATE AND STUDY AREA
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+ethiopia_poly <- vect("D:/shap/ethiopia/gadm41_ETH_0.shp")
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW MALARIA DATA
+mal_raw <- rast("D:/new resea/Ethiopia/malaria/malar_et_00.tif")
+if (nlyr(mal_raw) > 1) mal_raw <- mal_raw[[1]]
+cat("Raw malaria raster loaded\n")
+
+# 3. PROJECT + RESAMPLE TO 5km GRID
+mal_proj <- if (!same.crs(mal_raw, template)) project(mal_raw, template) else mal_raw
+mal_5km <- resample(mal_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 4. CLIP TO ETHIOPIA
+mal_crop <- crop(mal_5km, ethiopia_poly_utm)
+mal_clip <- mask(mal_crop, ethiopia_poly_utm)
+cat("Clipped to Ethiopia boundary\n")
+
+# 5. LOG1P TRANSFORMATION
+vals <- values(mal_clip)
+vals_eth <- vals[!is.na(vals)]
+vals_log <- log1p(vals_eth)
+cat("Log1p transformation applied\n")
+
+# 6. Z-SCORE STANDARDIZATION
+mean_val <- mean(vals_log)
+sd_val <- sd(vals_log)
+vals_std <- (vals_log - mean_val) / sd_val
+
+# 6a. HANDLE EXTREME Z-SCORES
+z_cap <- 5
+n_extreme <- sum(abs(vals_std) > z_cap)
+vals_std[vals_std > z_cap] <- z_cap
+vals_std[vals_std < -z_cap] <- -z_cap
+cat("Extreme z-scores capped at ±", z_cap, " (", n_extreme, "pixels adjusted)\n", sep="")
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(mal_clip) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1, extremes capped)\n")
+
+# 7. GEOMETRY CHECK
+geom_check <- compareGeom(mal_clip, template, stopOnError = FALSE)
+if (!geom_check) stop("Geometry mismatch with template.")
+cat("Geometry alignment: PASS\n")
+# 8. SAVE COVARIATE RASTER
+output_filename <- "eth_2000_malaria_5km_zlog_capped.tif"
+output_path <- file.path("D:/new resea/Ethiopia/each year/2000/Adjusted_Raster", output_filename)
+writeRaster(mal_clip, filename = output_path, overwrite = TRUE, gdal = "COMPRESS=LZW")
+cat("Raster saved:", output_path, "\n")
+# 9. METADATA FOR COVARIATE STAGE ONLY
+metadata <- list(
+  variable_name = "Malaria",
+  variable_code = "malaria",
+  year = 2000,
+  country = "Ethiopia",
+  source = "Malaria Atlas Project",
+  original_units = "continuous",
+  covariate_processing = list(
+    projection = "EPSG:32637 (UTM Zone 37N)",
+    resampling = "Bilinear",
+    masking = "Masked to Ethiopia national boundary",
+    transformation = "log1p",
+    scaling = "Z-score standardization (mean=0, SD=1, extremes capped at ±5)"
+  ),
+  spatial_resolution_m = paste(round(res(mal_clip), 2), collapse = " x "),
+  crs = as.character(crs(mal_clip)),
+  n_cells = ncell(mal_clip),
+  n_cells_valid = sum(!is.na(values(mal_clip))),
+  processing_steps = "projected, resampled (bilinear), masked to Ethiopia, log1p transformed, standardized (z-score), extreme z-scores capped at ±5",
+  alignment_passed = geom_check,
+  processing_date = as.character(Sys.Date())
+)
+
+jsonlite::write_json(
+  metadata,
+  path = gsub(".tif$", "_metadata.json", output_path),
+  pretty = TRUE, auto_unbox = TRUE
+)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== COVARIATE PREPARATION COMPLETE ===\n")
+```
+
+
+
+
+# surface solar radiation downwards (likely in J/m² over a time period, based on ERA5)
+
+```{r}
+cat("\n=== SOLAR RADIATION PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+library(terra)
+library(jsonlite)
+
+# 1. LOAD TEMPLATE AND STUDY AREA
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+ethiopia_poly <- vect("D:/shap/ethiopia/gadm41_ETH_0.shp")
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW SOLAR RADIATION
+solar_raw <- rast("D:/new resea/Ethiopia/ERA5 Ethiopia/solarradationdown/rad_00.tif")
+if(nlyr(solar_raw) > 1) solar_raw <- solar_raw[[1]]
+cat("Raw solar raster loaded\n")
+
+# 3. PROJECT + RESAMPLE TO 5KM GRID
+solar_proj <- if(!same.crs(solar_raw, template)) project(solar_raw, template) else solar_raw
+solar_5km <- resample(solar_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 4. CROP + MASK TO ETHIOPIA
+solar_crop <- crop(solar_5km, ethiopia_poly_utm)
+solar_clip <- mask(solar_crop, ethiopia_poly_utm)
+vals_before <- values(solar_clip)
+vals_eth <- vals_before[!is.na(vals_before)]
+cat("Clipped to Ethiopia, valid pixels:", length(vals_eth), "\n")
+
+# 5. Z-SCORE STANDARDIZATION
+mean_val <- mean(vals_eth)
+sd_val <- sd(vals_eth)
+vals_std_eth <- (vals_eth - mean_val) / sd_val
+
+vals_std_full <- rep(NA, length(vals_before))
+vals_std_full[!is.na(vals_before)] <- vals_std_eth
+values(solar_clip) <- vals_std_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 6. GEOMETRY CHECK
+geom_check <- compareGeom(solar_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 7. SAVE FINAL RASTER
+output_filename <- "eth_2000_solar_5km_zscore.tif"
+output_path <- file.path("D:/new resea/Ethiopia/each year/2000/Adjusted_Raster", output_filename)
+writeRaster(solar_clip, filename=output_path, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_path, "\n")
+
+# 8. METADATA
+metadata <- list(
+  variable_name = "Surface Solar Radiation Downwards",
+  variable_code = "solar",
+  year = 2000,
+  country = "Ethiopia",
+  source = "ERA5",
+  source_doi = "10.24381/cds.adbb2d47",
+  original_units = "J/m²",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(solar_clip)),
+  resolution_m = paste(res(solar_clip), collapse=" x "),
+  n_cells = ncell(solar_clip),
+  n_cells_valid = length(vals_eth),
+  transformation = "none",
+  standardization = "z-score",
+  final_min = min(vals_eth),
+  final_max = max(vals_eth),
+  final_mean = mean(vals_eth),
+  final_sd = sd(vals_eth),
+  final_skewness = e1071::skewness(vals_eth),
+  final_kurtosis = e1071::kurtosis(vals_eth),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(vals_before))
+)
+
+jsonlite::write_json(metadata, path=gsub(".tif$","_metadata.json",output_path), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== COVARIATE PREPARATION COMPLETE ===\n")
+```
+
+
+#  severe wasting prevalence at a certain spatial resolution
+
+```{r}
+cat("\n=== SEVERE WASTING (2000) PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+library(terra)
+library(jsonlite)
+library(e1071)
+
+# 1. LOAD TEMPLATE AND STUDY AREA
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+ethiopia_poly <- vect("D:/shap/ethiopia/gadm41_ETH_0.shp")
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW SEVERE WASTING RASTER
+SW_raw <- rast("D:/new resea/Ethiopia/Sever wasting/SW 2000.tif")
+if(nlyr(SW_raw) > 1) SW_raw <- SW_raw[[1]]
+cat("Raw Severe Wasting raster loaded\n")
+
+# 3. LOG1P TRANSFORMATION
+vals <- values(SW_raw)
+vals_eth <- vals[!is.na(vals)]
+vals_log <- log1p(vals_eth)
+cat("Log1p transformation applied\n")
+
+# 4. Z-SCORE STANDARDIZATION
+mean_val <- mean(vals_log)
+sd_val <- sd(vals_log)
+vals_std <- (vals_log - mean_val) / sd_val
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(SW_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 5. PROJECT + RESAMPLE TO 5KM TEMPLATE
+SW_proj <- if(!same.crs(SW_raw, template)) project(SW_raw, template) else SW_raw
+SW_5km <- resample(SW_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 6. CROP + MASK TO ETHIOPIA
+SW_crop <- crop(SW_5km, ethiopia_poly_utm)
+SW_clip <- mask(SW_crop, ethiopia_poly_utm)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(SW_clip))), "\n")
+
+# 7. GEOMETRY CHECK
+geom_check <- compareGeom(SW_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 8. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/SW00_5km_zlog.tif"
+writeRaster(SW_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 9. METADATA
+vals_final <- values(SW_clip)[!is.na(values(SW_clip))]
+metadata <- list(
+  variable_name = "Severe Wasting Prevalence",
+  variable_code = "SW00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD Raster Data",
+  original_units = "%",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(SW_clip)),
+  resolution_m = paste(res(SW_clip), collapse=" x "),
+  n_cells = ncell(SW_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "log1p",
+  standardization = "z-score",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(values(SW_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== SEVERE WASTING PREPARATION COMPLETE ===\n")
+```
+
+
+###   Water, Sanitation, and Hygiene (WASH, 2000)
+
+```{r}
+cat("\n=== WASH 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+library(terra)
+library(e1071)
+library(jsonlite)
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW WASH RASTER
+Wash_raw <- rast("D:/new resea/Ethiopia/wash/wash 2000.tif")
+if(nlyr(Wash_raw) > 1) Wash_raw <- Wash_raw[[1]]
+cat("Raw WASH raster loaded\n")
+
+# 3. LOG1P TRANSFORMATION
+vals <- values(Wash_raw)
+vals_nonNA <- vals[!is.na(vals)]
+vals_log <- log1p(vals_nonNA)
+cat("Log1p transformation applied\n")
+
+# 4. Z-SCORE STANDARDIZATION
+mean_val <- mean(vals_log)
+sd_val <- sd(vals_log)
+vals_std <- (vals_log - mean_val) / sd_val
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(Wash_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 5. PROJECT + RESAMPLE TO 5KM TEMPLATE
+Wash_proj <- if(!same.crs(Wash_raw, template)) project(Wash_raw, template) else Wash_raw
+Wash_5km <- resample(Wash_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 6. CROP + MASK TO ETHIOPIA
+Wash_crop <- crop(Wash_5km, template)
+Wash_clip <- mask(Wash_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(Wash_clip))), "\n")
+
+# 7. GEOMETRY CHECK
+geom_check <- compareGeom(Wash_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 8. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Wash00_5km_zlog.tif"
+writeRaster(Wash_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 9. METADATA
+vals_final <- values(Wash_clip)[!is.na(values(Wash_clip))]
+metadata <- list(
+  variable_name = "Water, Sanitation, and Hygiene (WASH)",
+  variable_code = "Wash00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD Raster Data",
+  original_units = "%",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(Wash_clip)),
+  resolution_m = paste(res(Wash_clip), collapse=" x "),
+  n_cells = ncell(Wash_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "log1p",
+  standardization = "z-score",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(values(Wash_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== WASH 2000 PREPARATION COMPLETE ===\n")
+```
+
+
+##  Education Coverage (EDUC, 2000)
+
+```{r}
+cat("\n=== EDUCATION 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW EDUCATION RASTER
+educ_raw <- rast("D:/new resea/Ethiopia/education/Educ_2000.tif")
+if(nlyr(educ_raw) > 1) educ_raw <- educ_raw[[1]]
+cat("Raw Education raster loaded\n")
+
+# 3. Z-SCORE STANDARDIZATION (no transformation)
+vals <- values(educ_raw)
+vals_nonNA <- vals[!is.na(vals)]
+mean_val <- mean(vals_nonNA)
+sd_val <- sd(vals_nonNA)
+vals_std <- (vals_nonNA - mean_val) / sd_val
+
+# 3a. HANDLE EXTREME Z-SCORES
+z_cap <- 5
+n_extreme <- sum(abs(vals_std) > z_cap)
+vals_std[vals_std > z_cap] <- z_cap
+vals_std[vals_std < -z_cap] <- -z_cap
+cat("Extreme z-scores capped at ±", z_cap, " (", n_extreme, "pixels adjusted)\n", sep="")
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(educ_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1, extremes capped)\n")
+
+# 4. PROJECT + RESAMPLE TO 5KM TEMPLATE
+educ_proj <- if(!same.crs(educ_raw, template)) project(educ_raw, template) else educ_raw
+educ_5km <- resample(educ_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 5. CROP + MASK TO ETHIOPIA
+educ_crop <- crop(educ_5km, template)
+educ_clip <- mask(educ_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(educ_clip))), "\n")
+
+# 6. GEOMETRY CHECK
+geom_check <- compareGeom(educ_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 7. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/educ00_5km_zscore_capped.tif"
+writeRaster(educ_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 8. METADATA
+vals_final <- values(educ_clip)[!is.na(values(educ_clip))]
+metadata <- list(
+  variable_name = "Education Coverage",
+  variable_code = "educ00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD Raster Data",
+  original_units = "%",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(educ_clip)),
+  resolution_m = paste(res(educ_clip), collapse=" x "),
+  n_cells = ncell(educ_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "none",
+  standardization = "z-score (extremes capped ±5)",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(values(educ_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== EDUCATION 2000 PREPARATION COMPLETE ===\n")
+```
+
+
+##  DPT3 vaccination coverage
+
+```{r}
+cat("\n=== DPT3 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW DPT3 RASTER
+dpt3_raw <- rast("D:/new resea/Ethiopia/dpt3/DPT3_ET_00.tif")
+if(nlyr(dpt3_raw) > 1) dpt3_raw <- dpt3_raw[[1]]
+cat("Raw DPT3 raster loaded\n")
+
+# 3. Z-SCORE STANDARDIZATION (no transformation)
+vals <- values(dpt3_raw)
+vals_nonNA <- vals[!is.na(vals)]
+mean_val <- mean(vals_nonNA)
+sd_val <- sd(vals_nonNA)
+vals_std <- (vals_nonNA - mean_val) / sd_val
+
+# 3a. HANDLE EXTREME Z-SCORES (cap at ±5)
+z_cap <- 5
+n_extreme <- sum(abs(vals_std) > z_cap)
+vals_std[vals_std > z_cap] <- z_cap
+vals_std[vals_std < -z_cap] <- -z_cap
+cat("Extreme z-scores capped at ±", z_cap, " (", n_extreme, "pixels adjusted)\n", sep="")
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(dpt3_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1, extremes capped)\n")
+
+# 4. PROJECT + RESAMPLE TO 5KM TEMPLATE
+dpt3_proj <- if(!same.crs(dpt3_raw, template)) project(dpt3_raw, template) else dpt3_raw
+dpt3_5km <- resample(dpt3_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 5. CROP + MASK TO ETHIOPIA
+dpt3_crop <- crop(dpt3_5km, template)
+dpt3_clip <- mask(dpt3_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(dpt3_clip))), "\n")
+
+# 6. GEOMETRY CHECK
+geom_check <- compareGeom(dpt3_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 7. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/dpt300_5km_zscore_capped.tif"
+writeRaster(dpt3_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 8. METADATA
+vals_final <- values(dpt3_clip)[!is.na(values(dpt3_clip))]
+metadata <- list(
+  variable_name = "DPT3 Vaccination Coverage",
+  variable_code = "dpt300_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD Raster Data",
+  original_units = "%",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(dpt3_clip)),
+  resolution_m = paste(res(dpt3_clip), collapse=" x "),
+  n_cells = ncell(dpt3_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "none",
+  standardization = "z-score (extremes capped ±5)",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(values(dpt3_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+
+cat("\n=== DPT3 2000 PREPARATION COMPLETE ===\n")
+```
+
+###   Improved Water Coverage
+
+```{r}
+cat("\n=== IMPROVED WATER 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW IMPROVED WATER RASTER
+Wate_raw <- rast("D:/new resea/Ethiopia/water/water 2000.tif")
+if(nlyr(Wate_raw) > 1) Wate_raw <- Wate_raw[[1]]
+cat("Raw Improved Water raster loaded\n")
+
+# 3. Z-SCORE STANDARDIZATION (no transformation, no capping)
+vals <- values(Wate_raw)
+vals_nonNA <- vals[!is.na(vals)]
+mean_val <- mean(vals_nonNA)
+sd_val <- sd(vals_nonNA)
+vals_std <- (vals_nonNA - mean_val) / sd_val
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(Wate_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 4. PROJECT + RESAMPLE TO 5KM TEMPLATE
+Wate_proj <- if(!same.crs(Wate_raw, template)) project(Wate_raw, template) else Wate_raw
+Wate_5km <- resample(Wate_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 5. CROP + MASK TO ETHIOPIA
+Wate_crop <- crop(Wate_5km, template)
+Wate_clip <- mask(Wate_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(Wate_clip))), "\n")
+
+# 6. GEOMETRY CHECK
+geom_check <- compareGeom(Wate_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 7. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Wate00_5km_zscore.tif"
+writeRaster(Wate_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 8. METADATA
+vals_final <- values(Wate_clip)[!is.na(values(Wate_clip))]
+metadata <- list(
+  variable_name = "Improved Water Coverage",
+  variable_code = "Wate00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD Raster Data",
+  original_units = "%",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(Wate_clip)),
+  resolution_m = paste(res(Wate_clip), collapse=" x "),
+  n_cells = ncell(Wate_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "none",
+  standardization = "z-score",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(values(Wate_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== IMPROVED WATER 2000 PREPARATION COMPLETE ===\n")
+```
+
+
+##  diarrhea incidence among under-five children
+
+```{r}
+cat("\n=== DIARRHEA INCIDENCE 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW DIARRHEA INCIDENCE RASTER
+dear_raw <- rast("D:/new resea/Ethiopia/deareha/dear_et_00.tif")
+if(nlyr(dear_raw) > 1) dear_raw <- dear_raw[[1]]
+cat("Raw Diarrhea Incidence raster loaded\n")
+
+# 3. Z-SCORE STANDARDIZATION (no transformation, no capping)
+vals <- values(dear_raw)
+vals_nonNA <- vals[!is.na(vals)]
+mean_val <- mean(vals_nonNA)
+sd_val <- sd(vals_nonNA)
+vals_std <- (vals_nonNA - mean_val) / sd_val
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(dear_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 4. PROJECT + RESAMPLE TO 5KM TEMPLATE
+dear_proj <- if(!same.crs(dear_raw, template)) project(dear_raw, template) else dear_raw
+dear_5km <- resample(dear_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 5. CROP + MASK TO ETHIOPIA
+dear_crop <- crop(dear_5km, template)
+dear_clip <- mask(dear_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(dear_clip))), "\n")
+
+# 6. GEOMETRY CHECK
+geom_check <- compareGeom(dear_clip, template, stopOnError=FALSE)
+cat("Geometry alignment with template:", ifelse(geom_check,"PASS","FAIL"), "\n")
+
+# 7. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/dear00_5km_zscore.tif"
+writeRaster(dear_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 8. METADATA
+vals_final <- values(dear_clip)[!is.na(values(dear_clip))]
+metadata <- list(
+  variable_name = "Diarrhea Incidence Under-5",
+  variable_code = "dear00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD Raster Data",
+  original_units = "cases per 1000 children",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(dear_clip)),
+  resolution_m = paste(res(dear_clip), collapse=" x "),
+  n_cells = ncell(dear_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "none",
+  standardization = "z-score",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  alignment_passed = geom_check,
+  missing_final = sum(is.na(values(dear_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+cat("\n=== DIARRHEA INCIDENCE 2000 PREPARATION COMPLETE ===\n")
+```
+
+
+
+##  Normalized Difference Vegetation Index
+
+```{r}
+cat("\n=== NDVI 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW NDVI RASTER
+Ndvi_raw <- rast("D:/new resea/Ethiopia/NDVI Ethiopia/NDVI_2000_Ethiopia.tif")
+if(nlyr(Ndvi_raw) > 1) Ndvi_raw <- Ndvi_raw[[1]]
+cat("Raw NDVI raster loaded\n")
+cat("Value range:", range(values(Ndvi_raw), na.rm=TRUE), 
+    "Mean:", mean(values(Ndvi_raw), na.rm=TRUE),
+    "SD:", sd(values(Ndvi_raw), na.rm=TRUE), "\n\n")
+
+# 3. Z-SCORE STANDARDIZATION (no transformation, no capping)
+vals <- values(Ndvi_raw)
+vals_nonNA <- vals[!is.na(vals)]
+mean_val <- mean(vals_nonNA)
+sd_val <- sd(vals_nonNA)
+vals_std <- (vals_nonNA - mean_val) / sd_val
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(Ndvi_raw) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 4. PROJECT + RESAMPLE TO 5KM TEMPLATE
+Ndvi_proj <- if(!same.crs(Ndvi_raw, template)) project(Ndvi_raw, template) else Ndvi_raw
+Ndvi_5km <- resample(Ndvi_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 5. CROP + MASK TO ETHIOPIA
+Ndvi_crop <- crop(Ndvi_5km, template)
+Ndvi_clip <- mask(Ndvi_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(Ndvi_clip))), "\n")
+
+# 6. IMPUTE MISSING VALUES (0 in z-space)
+vals_clip <- values(Ndvi_clip)
+values(Ndvi_clip) <- vals_clip
+cat("Missing pixels after imputation:", sum(is.na(values(Ndvi_clip))), "\n")
+
+# 7. SAVE FINAL RASTER
+output_raster <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Ndvi00_5km_zscore.tif"
+writeRaster(Ndvi_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 8. METADATA
+vals_final <- values(Ndvi_clip)[!is.na(values(Ndvi_clip))]
+metadata <- list(
+  variable_name = "NDVI",
+  variable_code = "Ndvi00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "NASA",
+  original_units = "unitless (fraction)",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(Ndvi_clip)),
+  resolution_m = paste(res(Ndvi_clip), collapse=" x "),
+  n_cells = ncell(Ndvi_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "none",
+  standardization = "z-score",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  missing_final = sum(is.na(values(Ndvi_clip)))
+)
+
+write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+
+# 9. DIAGNOSTICS TABLE
+diagnostic_table <- data.frame(
+  variable = "Ndvi00_5km",
+  min = min(vals_final),
+  max = max(vals_final),
+  range = max(vals_final) - min(vals_final),
+  mean = mean(vals_final),
+  median = median(vals_final),
+  sd = sd(vals_final),
+  n_missing = sum(is.na(values(Ndvi_clip))),
+  n_non_missing = length(vals_final),
+  prop_missing = sum(is.na(values(Ndvi_clip))) / ncell(Ndvi_clip),
+  skewness = skewness(vals_final),
+  suggested_transformation = "none",
+  suggested_rescaling = "Z-score",
+  imputation = "Mean in z-score space (0)"
+)
+
+write_xlsx(diagnostic_table, "D:/new resea/Ethiopia/data managment/diagnose/NDVI00_5km.xlsx")
+write.csv(diagnostic_table, "D:/new resea/Ethiopia/data managment/diagnose/NDVI00_5km.csv", row.names=FALSE)
+cat("Diagnostics exported to Excel and CSV\n\n")
+
+cat("=== NDVI 2000 PREPARATION COMPLETE ===\n")
+cat("Raster:", output_raster, "\n")
+cat("Metadata JSON:", gsub(".tif$","_metadata.json",output_raster), "\n")
+```
+
+##  Fine Particulate Matter (PM2.5)
+
+```{r}
+cat("\n=== PM2.5 2000 PREPARATION FOR INLA + SPDE (COVARIATE STAGE) ===\n")
+
+# 1. LOAD TEMPLATE
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+cat("Template loaded and CRS verified\n")
+
+# 2. LOAD RAW PM2.5 RASTER
+raster_path <- "D:/new resea/Ethiopia/pm2.5/pm25_et_00.tif"
+raster_name <- "PM2.5_2000"
+r <- rast(raster_path)
+if(nlyr(r) > 1) r <- r[[1]]
+cat("Raw PM2.5 raster loaded\n")
+cat("Value range:", range(values(r), na.rm=TRUE), 
+    "Mean:", mean(values(r), na.rm=TRUE),
+    "SD:", sd(values(r), na.rm=TRUE), "\n\n")
+
+# 3. Z-SCORE STANDARDIZATION (no transformation, no capping)
+vals <- values(r)
+vals_nonNA <- vals[!is.na(vals)]
+vals_std <- (vals_nonNA - mean(vals_nonNA)) / sd(vals_nonNA)
+
+vals_full <- rep(NA, length(vals))
+vals_full[!is.na(vals)] <- vals_std
+values(r) <- vals_full
+cat("Z-score standardization complete (mean ≈ 0, sd ≈ 1)\n")
+
+# 4. PROJECT + RESAMPLE TO 5KM TEMPLATE
+r_proj <- if(!same.crs(r, template)) project(r, template) else r
+r_5km <- resample(r_proj, template, method="bilinear")
+cat("Projected and resampled to 5km\n")
+
+# 5. CROP + MASK TO ETHIOPIA
+r_crop <- crop(r_5km, template)
+r_clip <- mask(r_crop, template)
+cat("Clipped to Ethiopia boundary, valid pixels:", sum(!is.na(values(r_clip))), "\n")
+
+# 6. IMPUTE MISSING VALUES (0 in z-space)
+vals_clip <- values(r_clip)
+values(r_clip) <- vals_clip
+cat("Missing pixels after imputation:", sum(is.na(values(r_clip))), "\n")
+
+# 7. SAVE FINAL RASTER
+output_raster <- paste0("D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/", raster_name, "_5km.tif")
+writeRaster(r_clip, filename=output_raster, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Raster saved:", output_raster, "\n")
+
+# 8. METADATA
+vals_final <- values(r_clip)[!is.na(values(r_clip))]
+metadata <- list(
+  variable_name = "PM2.5",
+  variable_code = "PM25_00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "GBD",
+  original_units = "µg/m³",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"],
+  r_version = R.version.string,
+  terra_version = as.character(packageVersion("terra")),
+  crs = as.character(crs(r_clip)),
+  resolution_m = paste(res(r_clip), collapse=" x "),
+  n_cells = ncell(r_clip),
+  n_cells_valid = length(vals_final),
+  transformation = "none",
+  standardization = "z-score",
+  final_min = min(vals_final),
+  final_max = max(vals_final),
+  final_mean = mean(vals_final),
+  final_sd = sd(vals_final),
+  final_skewness = skewness(vals_final),
+  missing_final = sum(is.na(values(r_clip)))
+)
+
+jsonlite::write_json(metadata, path=gsub(".tif$","_metadata.json",output_raster), pretty=TRUE, auto_unbox=TRUE)
+cat("Covariate-stage metadata saved\n")
+
+cat("=== PM2.5 2000 PROCESSING COMPLETE ===\n")
+cat("Raster:", output_raster, "\n")
+cat("Metadata JSON:", gsub(".tif$","_metadata.json",output_raster), "\n")
+```
+
+##  HIV Prevalence
+
+```{r}
+cat("\n=== HIV 2000 PROCESSING (GBD DATA) ===\n")
+
+# 1. Load 5 km Ethiopia template
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+plot(template, main="5 km Template Ethiopia")
+
+# 2. Load raw HIV raster
+HIV_00 <- rast("D:/new resea/Ethiopia/HIV/HIV_ETH_00.tif")
+plot(HIV_00, main="HIV Prevalence 2000 (Raw)")
+summary(HIV_00[[1]])
+cat("Missing pixels:", sum(is.na(values(HIV_00[[1]]))), "\n\n")
+
+# 3. Apply log1p transformation
+hiv_trans <- log1p(values(HIV_00[[1]]))  
+
+# 4. Z-score standardization
+hiv_std <- (hiv_trans - mean(hiv_trans, na.rm=TRUE)) / sd(hiv_trans, na.rm=TRUE)
+values(HIV_00[[1]]) <- hiv_std
+summary(HIV_00)
+hist(hiv_std, breaks=50, main="Distribution of HIV Prevalence (Z-score)", xlab="Z-score")
+
+# 5. Project to template CRS
+HIV_utm <- project(HIV_00, crs(template))
+
+# 6. Resample to 5 km template
+HIV_5km <- resample(HIV_utm[[1]], template, method="bilinear")
+
+# 7. Crop and mask to Ethiopia boundary
+HIV_5km_crop <- crop(HIV_5km, template)
+HIV_5km_clip <- mask(HIV_5km_crop, template)
+plot(HIV_5km_clip, main="HIV Prevalence 2000 (Z-score, Clipped)")
+summary(HIV_5km_clip)
+cat("Missing pixels after clipping:", sum(is.na(values(HIV_5km_clip))), "\n\n")
+
+# 8. Metadata
+hiv_values <- values(HIV_5km_clip)
+hiv_values_nonNA <- hiv_values[!is.na(hiv_values)]
+
+HIV_metadata <- list(
+  variable = "HIV Prevalence",
+  year = 2000,
+  source = "GBD",
+  units = "fraction (0-1)",
+  spatial_resolution_km = 5,
+  crs = crs(HIV_5km_clip),
+  n_rows = nrow(HIV_5km_clip),
+  n_cols = ncol(HIV_5km_clip),
+  n_cells_total = ncell(HIV_5km_clip),
+  n_cells_valid = sum(!is.na(values(HIV_5km_clip))),
+  n_cells_missing = sum(is.na(values(HIV_5km_clip))),
+  min = min(hiv_values_nonNA),
+  max = max(hiv_values_nonNA),
+  mean = mean(hiv_values_nonNA),
+  sd = sd(hiv_values_nonNA),
+  skewness = skewness(hiv_values_nonNA),
+  transformation = "log1p",
+  standardization = "z-score",
+  processing_notes = "Cropped, masked, Z-score standardized, missing values imputed with 0"
+)
+
+jsonlite::write_json(
+  HIV_metadata, 
+  "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/HIV00_5km_metadata.json",
+  pretty = TRUE
+)
+cat("HIV metadata saved\n\n")
+
+# 9. Save final raster
+writeRaster(
+  HIV_5km_clip,
+  "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/HIV00_5km.tif",
+  overwrite = TRUE
+)
+cat("Final HIV raster saved\n")
+```
+
+###  Potential Evaporation (EVAP)
+
+```{r}
+cat("\n=== POTENTIAL EVAPORATION (2000) COVARIATE PREPARATION FOR INLA + SPDE ===\n")
+
+# ----------------------------------
+# 1. LOAD LIBRARIES
+# ----------------------------------
+library(terra)
+library(jsonlite)
+
+# ----------------------------------
+# 2. DEFINE PATHS
+# ----------------------------------
+template_path <- "D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif"
+shapefile_path <- "D:/shap/ethiopia/gadm41_ETH_0.shp"
+raw_raster_path <- "D:/new resea/Ethiopia/ERA5 Ethiopia/potentialevaporation/evap_00.tif"
+
+output_dir <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster"
+
+# Create output folder if missing
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE)
+  cat("Output directory created\n")
+} else {
+  cat("Output directory already exists\n")
+}
+
+# ----------------------------------
+# 3. LOAD TEMPLATE AND ETHIOPIA BOUNDARY
+# ----------------------------------
+template <- rast(template_path)
+ethiopia_poly <- vect(shapefile_path)
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Template and CRS verified\n")
+
+# ----------------------------------
+# 4. LOAD RAW ERA5 POTENTIAL EVAPORATION
+# ----------------------------------
+evap_raw <- rast(raw_raster_path)
+if (nlyr(evap_raw) > 1) evap_raw <- evap_raw[[1]]
+
+cat("Raw raster loaded\n")
+
+# ----------------------------------
+# 5. LOG TRANSFORMATION (log1p)
+# ----------------------------------
+vals_raw <- values(evap_raw)
+vals_log <- log1p(vals_raw)
+values(evap_raw) <- vals_log
+
+cat("log1p transformation applied\n")
+
+# ----------------------------------
+# 6. PROJECT + RESAMPLE TO 5km GRID
+# ----------------------------------
+evap_proj <- if (!same.crs(evap_raw, template)) {
+  project(evap_raw, template)
+} else {
+  evap_raw
+}
+
+evap_5km <- resample(evap_proj, template, method = "bilinear")
+
+cat("Projection and resampling complete\n")
+
+# ----------------------------------
+# 7. CLIP TO ETHIOPIA
+# ----------------------------------
+evap_crop <- crop(evap_5km, ethiopia_poly_utm)
+evap_clip <- mask(evap_crop, ethiopia_poly_utm)
+
+cat("Clipped to Ethiopia boundary\n")
+
+# ----------------------------------
+# 8. Z-SCORE STANDARDIZATION (Ethiopia pixels only)
+# ----------------------------------
+vals <- values(evap_clip)
+vals_eth <- vals[!is.na(vals)]
+
+vals_z <- (vals - mean(vals_eth)) / sd(vals_eth)
+
+# Cap extreme values (lower tail ≈ -8)
+z_cap <- 5
+vals_z[vals_z > 5]  <- 5
+vals_z[vals_z < -5] <- -5
+
+values(evap_clip) <- vals_z
+
+cat("Standardization complete (mean≈0, sd≈1, capped ±5)\n")
+
+# ----------------------------------
+# 9. GEOMETRY CHECK
+# ----------------------------------
+geom_check <- compareGeom(evap_clip, template, stopOnError = FALSE)
+
+if (!geom_check) {
+  stop("Geometry mismatch detected.")
+} else {
+  cat("Geometry alignment: PASS\n")
+}
+
+# ----------------------------------
+# 10. SAVE FINAL RASTER
+# ----------------------------------
+output_raster_path <- file.path(
+  output_dir,
+  "eth_2000_potential_evaporation_5km_z.tif"
+)
+
+writeRaster(
+  evap_clip,
+  filename = output_raster_path,
+  overwrite = TRUE,
+  gdal = "COMPRESS=LZW"
+)
+
+cat("Final raster saved:\n", output_raster_path, "\n")
+
+# ----------------------------------
+# 11. GENERATE METADATA
+# ----------------------------------
+evap_values <- values(evap_clip)
+evap_values_nonNA <- evap_values[!is.na(evap_values)]
+
+EVAP_metadata <- list(
+  variable_name = "Potential Evaporation",
+  variable_code = "potential_evaporation",
+  year = 2000,
+  country = "Ethiopia",
+  source = "ERA5 Reanalysis",
+  source_doi = "10.24381/cds.adbb2d47",
+  original_units = "mm/day",
+  covariate_processing = list(
+    transformation = "log1p",
+    projection = as.character(crs(evap_clip)),
+    resampling = "Bilinear",
+    masking = "Masked to Ethiopia national boundary",
+    scaling = "Z-score standardization (mean=0, SD=1) with ±5 cap"
+  ),
+  spatial_resolution_m = paste(round(res(evap_clip), 2), collapse = " x "),
+  n_cells_total = ncell(evap_clip),
+  n_cells_valid = sum(!is.na(evap_values)),
+  n_cells_missing = sum(is.na(evap_values)),
+  min = min(evap_values_nonNA),
+  max = max(evap_values_nonNA),
+  mean = mean(evap_values_nonNA),
+  sd = sd(evap_values_nonNA),
+  alignment_passed = geom_check,
+  processing_date = as.character(Sys.Date())
+)
+
+metadata_path <- file.path(
+  output_dir,
+  "eth_2000_potential_evaporation_5km_z_metadata.json"
+)
+
+write_json(
+  EVAP_metadata,
+  path = metadata_path,
+  pretty = TRUE,
+  auto_unbox = TRUE
+)
+
+cat("Metadata saved:\n", metadata_path, "\n")
+
+cat("\n=== POTENTIAL EVAPORATION (2000) PROCESSING COMPLETE ===\n")
+```
+
+##  Runoff
+
+```{r}
+cat("\n=== Runoff 2000 PROCESSING (ERA5 DATA, extreme Z-score handled) ===\n")
+# 1. Load 5 km Ethiopia template and shapefile
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+ethiopia_poly <- vect("D:/shap/ethiopia/gadm41_ETH_0.shp")
+ethiopia_poly_utm <- project(ethiopia_poly, crs(template))
+stopifnot(crs(template) == crs(ethiopia_poly_utm))
+cat("Template and Ethiopia boundary loaded. CRS verified.\n\n")
+# 2. Load raw runoff raster
+run_raw <- rast("D:/new resea/Ethiopia/ERA5 Ethiopia/runoff/run_00.tif")
+if (nlyr(run_raw) > 1) run_raw <- run_raw[[1]]
+run_vals <- values(run_raw)
+cat("Raw runoff: missing pixels =", sum(is.na(run_vals)), "\n")
+cat("Value range:", range(run_vals, na.rm=TRUE), "\n\n")
+# 3. Apply log1p transformation
+run_trans <- log1p(run_vals)
+# 4. Z-score standardization
+mean_val <- mean(run_trans, na.rm=TRUE)
+sd_val   <- sd(run_trans, na.rm=TRUE)
+run_std <- (run_trans - mean_val) / sd_val
+# 5. Handle extreme Z-scores by capping at ±5
+run_std[run_std > 5] <- 5
+run_std[run_std < -5] <- -5
+values(run_raw) <- run_std
+# Quick diagnostic plot
+hist(run_std, breaks=50, main="Runoff (Z-score capped ±5)", xlab="Z-score")
+# 6. Project to template CRS
+run_proj <- project(run_raw, template)
+# 7. Resample to 5 km template
+run_5km <- resample(run_proj, template, method="bilinear")
+# 8. Crop and mask to Ethiopia boundary
+run_crop <- crop(run_5km, ethiopia_poly_utm)
+run_clip <- mask(run_crop, ethiopia_poly_utm)
+plot(run_clip, main="Standardized Runoff 2000 (5 km, Clipped, Z capped)")
+# 9. Create metadata
+run_final_vals <- values(run_clip)
+run_nonNA <- run_final_vals[!is.na(run_final_vals)]
+Runoff_metadata <- list(
+  variable = "Runoff",
+  year = 2000,
+  source = "ERA5",
+  units = "m³/s or mm/day",
+  spatial_resolution_km = 5,
+  crs = crs(run_clip),
+  n_rows = nrow(run_clip),
+  n_cols = ncol(run_clip),
+  n_cells_total = ncell(run_clip),
+  n_cells_valid = sum(!is.na(values(run_clip))),
+  n_cells_missing = sum(is.na(values(run_clip))),
+  min = min(run_nonNA),
+  max = max(run_nonNA),
+  mean = mean(run_nonNA),
+  sd = sd(run_nonNA),
+  skewness = skewness(run_nonNA),
+  transformation = "log1p",
+  standardization = "z-score",
+  extreme_handling = "Z-scores capped at ±5",
+  processing_notes = "Cropped, masked, Z-score standardized, log1p transformed"
+)
+jsonlite::write_json(
+  Runoff_metadata, 
+  "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Runoff00_5km_metadata.json",
+  pretty = TRUE
+)
+cat("Runoff metadata saved\n\n")
+# 10. Save final raster
+output_path <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Runoff00_5km_clip_std.tif"
+writeRaster(run_clip, filename=output_path, overwrite=TRUE, gdal="COMPRESS=LZW")
+cat("Final Runoff raster saved to:", output_path, "\n")
+```
+
+##  Slope (SLO, 2000)
+
+```{r}
+cat("\n=== Slope 2000 PROCESSING (log1p + Z-score with extreme handling) ===\n")
+# 1. Load template
+template <- rast("D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif")
+plot(template, main="5 km Template Ethiopia")
+# 2. Load raw Slope raster
+Slo_00 <- rast("D:/new resea/Ethiopia/slop/eth_slope_merit103_100m_v1.tif")
+plot(Slo_00, main="Raw Slope (2000)")
+summary(Slo_00)
+sum(is.na(values(Slo_00[[1]])))  # check missing pixels
+# 3. Log1p transformation (slope is strictly positive and right-skewed)
+slo_trans <- log1p(values(Slo_00[[1]]))  
+# 4. Z-score standardization
+slo_std <- (slo_trans - mean(slo_trans, na.rm = TRUE)) / sd(slo_trans, na.rm = TRUE)
+# 5. Handle extreme Z-scores by capping at ±5
+slo_std[slo_std > 5] <- 5
+slo_std[slo_std < -5] <- -5
+values(Slo_00[[1]]) <- slo_std
+# Quick diagnostic check
+summary(Slo_00)
+hist(slo_std, breaks=50, main="Distribution of Slope (Z-score capped ±5)", xlab="Z-score")
+# 6. Project to template CRS
+Slo_utm <- project(Slo_00, crs(template))
+# 7. Resample to 5 km
+Slo00_5km <- resample(Slo_utm[[1]], template, method="bilinear")
+# 8. Crop and mask to template extent
+Slo00_5km_crop <- crop(Slo00_5km, template)
+Slo00_5km_clip <- mask(Slo00_5km_crop, template)
+plot(Slo00_5km_clip, main="Standardized Slope (5 km, Clipped)")
+summary(Slo00_5km_clip)
+sum(is.na(values(Slo00_5km_clip)))  # check missing pixels
+# 9. Create metadata
+slo_values <- values(Slo00_5km_clip)
+slo_nonNA <- slo_values[!is.na(slo_values)]
+Slope_metadata <- list(
+  variable = "Slope",   
+  year = 2000,
+  units = "degrees",
+  source = "Digital Elevation Models (DEMs)",
+  spatial_resolution_km = 5,
+  crs = crs(Slo00_5km_clip),
+  n_rows = nrow(Slo00_5km_clip),
+  n_cols = ncol(Slo00_5km_clip),
+  n_cells_total = ncell(Slo00_5km_clip),
+  n_cells_valid = sum(!is.na(values(Slo00_5km_clip))),
+  n_cells_missing = sum(is.na(values(Slo00_5km_clip))),
+  min = min(slo_nonNA),
+  max = max(slo_nonNA),
+  mean = mean(slo_nonNA),
+  sd = sd(slo_nonNA),
+  skewness = skewness(slo_nonNA),
+  transformation = "log1p",
+  standardization = "z-score",
+  extreme_handling = "Z-scores capped at ±5",
+  processing_notes = "Cropped, masked, Z-score standardized, log1p transformed"
+)
+jsonlite::write_json(
+  Slope_metadata, 
+  "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Slo00_5km_metadata.json",
+  pretty = TRUE
+)
+cat("Slope metadata saved\n")
+# 10. Save final raster
+writeRaster(
+  Slo00_5km_clip,
+  "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster/Slo00_5km.tif",
+  overwrite = TRUE
+)
+```
+
+```{r worldpop}
+
+# WORLD POPULATION (UNDER-5) AGGREGATION TO 5km TEMPLATE
+# For under-five mortality rate calculation (denominator)
+cat("\n=== WORLD POPULATION AGGREGATION (2000) ===\n")
+
+# 1. Load libraries and template
+library(terra)
+library(sf)
+library(exactextractr)
+library(jsonlite)
+library(e1071)
+
+template_path <- "D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif"
+pop_100m_path <- "D:/new resea/Ethiopia/population/Pop_00.tif"
+output_dir <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster"
+output_file <- file.path(output_dir, "Pop00_5km.tif")
+metadata_file <- file.path(output_dir, "Pop00_5km_metadata.json")
+diagnostic_file <- file.path(output_dir, "Pop00_5km_diagnostics.csv")
+
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+# 2. Load template and 100m population
+ref <- rast(template_path)
+pop_100m <- rast(pop_100m_path)
+cat("Template and 100m population loaded.\n")
+
+# 3. Convert template to polygons (in same CRS as population)
+ref_wgs <- project(ref, crs(pop_100m))
+polys_wgs <- as.polygons(ref_wgs, dissolve = FALSE)
+ref_sf <- st_as_sf(polys_wgs)
+
+# 4. Aggregate using exact_extract (sum of population per 5km cell)
+pop_sum_values <- exact_extract(pop_100m, ref_sf, fun = "sum")
+
+# 5. Create 5km population raster
+pop_5km <- ref
+values(pop_5km)[!is.na(values(pop_5km))] <- pop_sum_values
+
+# 6. Diagnostics
+pop_vals <- values(pop_5km)
+pop_vals_nonNA <- pop_vals[!is.na(pop_vals)]
+diagnostics <- data.frame(
+  variable = "Pop00_5km",
+  year = 2000,
+  source = "WorldPop",
+  original_resolution = "100m",
+  aggregation_method = "sum (exact_extract)",
+  n_cells_total = ncell(pop_5km),
+  n_cells_valid = length(pop_vals_nonNA),
+  n_cells_missing = sum(is.na(pop_vals)),
+  min = min(pop_vals_nonNA, na.rm = TRUE),
+  max = max(pop_vals_nonNA, na.rm = TRUE),
+  sum = sum(pop_vals_nonNA, na.rm = TRUE),
+  mean = mean(pop_vals_nonNA, na.rm = TRUE),
+  sd = sd(pop_vals_nonNA, na.rm = TRUE),
+  skewness = skewness(pop_vals_nonNA, na.rm = TRUE),
+  percent_zeros = 100 * sum(pop_vals_nonNA == 0) / length(pop_vals_nonNA),
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"]
+)
+write.csv(diagnostics, diagnostic_file, row.names = FALSE)
+cat("Diagnostics saved to:", diagnostic_file, "\n")
+
+# 7. Metadata JSON
+metadata <- list(
+  variable_name = "Under-five population count",
+  variable_code = "Pop00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  source = "WorldPop",
+  source_url = "https://www.worldpop.org/",
+  original_units = "persons per 100m grid cell",
+  final_units = "persons per 5km grid cell",
+  aggregation = "sum of 100m cells within each 5km cell",
+  spatial_resolution_m = paste(res(pop_5km), collapse = " x "),
+  crs = as.character(crs(pop_5km)),
+  n_cells_total = ncell(pop_5km),
+  n_cells_valid = length(pop_vals_nonNA),
+  n_cells_missing = sum(is.na(pop_vals)),
+  total_population = sum(pop_vals_nonNA, na.rm = TRUE),
+  mean_cell_population = mean(pop_vals_nonNA, na.rm = TRUE),
+  median_cell_population = median(pop_vals_nonNA, na.rm = TRUE),
+  min_cell_population = min(pop_vals_nonNA, na.rm = TRUE),
+  max_cell_population = max(pop_vals_nonNA, na.rm = TRUE),
+  skewness = skewness(pop_vals_nonNA, na.rm = TRUE),
+  processing_date = as.character(Sys.Date()),
+  software = list(R_version = R.version.string, terra_version = as.character(packageVersion("terra")))
+)
+write_json(metadata, metadata_file, pretty = TRUE, auto_unbox = TRUE)
+cat("Metadata saved to:", metadata_file, "\n")
+
+# 8. Save raster
+writeRaster(pop_5km, output_file, gdal = "COMPRESS=LZW", overwrite = TRUE)
+cat("Population raster saved to:", output_file, "\n")
+cat("=== POPULATION AGGREGATION COMPLETE ===\n")
+```
+
+```{r inhabited areas}
+# INHABITED AREAS MASK (5km) – ETHIOPIA 2000
+# Based on: NDVI >= 0.1, land (not water), population >= 1
+
+cat("\n=== INHABITED AREAS MASK (2000) ===\n")
+
+library(terra)
+library(sf)
+library(jsonlite)
+library(e1071)
+
+template_path <- "D:/new resea/Ethiopia/zz template/template_5km_ethiopia.tif"
+ndvi_path <- "D:/U5M/NDVI Ethiopia/NDVI_2000_Ethiopia.tif"
+water_path <- "D:/shap/ethio waterbody.tif"
+pop_path <- "D:/U5M/population/Pop00_5km.tif"   # use the newly created 5km population
+output_dir <- "D:/new resea/Ethiopia/each year/2000/Adjusted_Raster"
+output_mask <- file.path(output_dir, "inhabit00_5km.tif")
+metadata_file <- file.path(output_dir, "inhabit00_5km_metadata.json")
+diagnostic_file <- file.path(output_dir, "inhabit00_5km_diagnostics.csv")
+
+if (!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
+
+# 1. Load template
+template <- rast(template_path)
+cat("Template loaded.\n")
+
+# 2. NDVI mask (>= 0.1)
+cat("\n--- NDVI mask ---\n")
+ndvi_raw <- rast(ndvi_path)
+if (nlyr(ndvi_raw) > 1) ndvi_raw <- ndvi_raw[[1]]
+# Scale if MODIS (0-10000 scale → 0-1)
+if (minmax(ndvi_raw)[2] > 1) ndvi_raw <- ndvi_raw * 0.0001
+ndvi_proj <- project(ndvi_raw, template, method = "bilinear")
+ndvi_mask <- ifel(ndvi_proj >= 0.1, 1, NA)
+cat("NDVI mask: inhabited cells =", sum(values(ndvi_mask) == 1, na.rm = TRUE), "\n")
+
+# 3. Water mask (0 = land, 1 = water)
+cat("\n--- Water mask ---\n")
+water <- rast(water_path)[[1]]
+water_proj <- project(water, template, method = "near")
+land_mask <- ifel(water_proj == 0, 1, NA)   # 1 = land, NA = water
+cat("Land mask: land cells =", sum(values(land_mask) == 1, na.rm = TRUE), "\n")
+
+# 4. Population mask (>= 1 person)
+cat("\n--- Population mask ---\n")
+pop_5km <- rast(pop_path)
+pop_mask <- ifel(pop_5km >= 1, 1, NA)
+cat("Population mask: inhabited cells =", sum(values(pop_mask) == 1, na.rm = TRUE), "\n")
+
+# 5. Align all masks (resample to template to be safe)
+ndvi_mask <- resample(ndvi_mask, template, method = "near")
+land_mask <- resample(land_mask, template, method = "near")
+pop_mask  <- resample(pop_mask,  template, method = "near")
+
+# 6. Combine (logical AND)
+inhabit_mask <- app(c(ndvi_mask, land_mask, pop_mask), fun = function(x) {
+  if (all(x == 1, na.rm = TRUE)) 1 else NA
+})
+cat("Final inhabited mask: cells =", sum(values(inhabit_mask) == 1, na.rm = TRUE), "\n")
+
+# 7. Diagnostics
+mask_vals <- values(inhabit_mask)
+total_cells <- sum(!is.na(values(template)))
+inhabited_cells <- sum(mask_vals == 1, na.rm = TRUE)
+diagnostics <- data.frame(
+  variable = "inhabit00_5km",
+  year = 2000,
+  method = "NDVI >= 0.1 AND land (water == 0) AND population >= 1",
+  total_5km_cells = total_cells,
+  inhabited_cells = inhabited_cells,
+  percent_inhabited = 100 * inhabited_cells / total_cells,
+  ndvi_threshold = 0.1,
+  water_mask = "land only (water == 0)",
+  population_threshold = ">= 1 person",
+  processing_date = as.character(Sys.Date()),
+  processed_by = Sys.info()["user"]
+)
+write.csv(diagnostics, diagnostic_file, row.names = FALSE)
+cat("Diagnostics saved to:", diagnostic_file, "\n")
+
+# 8. Metadata JSON
+metadata <- list(
+  variable_name = "Inhabited areas mask",
+  variable_code = "inhabit00_5km",
+  year = 2000,
+  country = "Ethiopia",
+  definition = "Cells classified as inhabited if: (1) NDVI >= 0.1, (2) land (not water), (3) population >= 1",
+  data_sources = list(
+    NDVI = "MODIS (scaled 0-1)",
+    water = "Global Surface Water (ESA)",
+    population = "WorldPop aggregated to 5km"
+  ),
+  spatial_resolution_m = paste(res(inhabit_mask), collapse = " x "),
+  crs = as.character(crs(inhabit_mask)),
+  n_cells_total = total_cells,
+  n_cells_inhabited = inhabited_cells,
+  percent_inhabited = round(100 * inhabited_cells / total_cells, 2),
+  processing_steps = c(
+    "Project all inputs to template CRS",
+    "Resample to 5km template",
+    "Create binary masks: NDVI>=0.1, land=1, pop>=1",
+    "Combine with logical AND"
+  ),
+  processing_date = as.character(Sys.Date()),
+  software = list(R_version = R.version.string, terra_version = as.character(packageVersion("terra")))
+)
+write_json(metadata, metadata_file, pretty = TRUE, auto_unbox = TRUE)
+cat("Metadata saved to:", metadata_file, "\n")
+
+# 9. Save final mask
+writeRaster(inhabit_mask, output_mask, gdal = "COMPRESS=LZW", overwrite = TRUE)
+cat("Inhabited mask saved to:", output_mask, "\n")
+cat("=== INHABITED MASK COMPLETE ===\n")
+```
+
+
