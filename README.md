@@ -16,7 +16,7 @@ Relative comparisons and spatial patterns within Ethiopia are still valid. For a
 
 Covariates derived from satellite/ERA5 (NDVI, Runoff, etc.) were standardised after masking and have correct z-score properties (mean near 0, SD near 1).
 
-Scripts
+1. Scripts
 
 01_censoring_adjustment.Rmd
 - Loads raw rasters for 21 covariates and DHS data for Ethiopia.
@@ -35,13 +35,13 @@ Scripts
 Third script (INLA model – NOT SHARED)
 Uses the outputs of the first two scripts. From the 16 covariates, it selects the best 12 based on Variance Inflation Factor (VIF) and correlation with mortality. It then performs small area estimation. The full code is private, but example outputs are provided.
 
-Data requirements – real data (NOT INCLUDED)
+2. Data requirements – real data (NOT INCLUDED)
 
 For the covariate script (02_covariate_adjustment.Rmd): Raw rasters from ERA5, GBD, MODIS, WorldPop, Malaria Atlas Project, etc. Not included; users must obtain them.
 
 For the censoring script (01_censoring_adjustment.Rmd): Real DHS data file (all apend.dta) for Ethiopia. Restricted; must be requested from dhsprogram.com. A synthetic substitute is provided for testing the pipeline (see below).
 
-Synthetic DHS data (INCLUDED)
+ Synthetic DHS data (INCLUDED)
 
 To allow users to test 01_censoring_adjustment.Rmd without accessing restricted DHS data, we provide a fully synthetic dataset: data/synthetic_dhs.rds. This file mimics the structure of the real DHS file all apend.dta but contains no real survey responses – all values are randomly generated.
 
@@ -49,7 +49,7 @@ Variables included: b5 (survival 0/1), b7, b19, b8, b2, b1, v001, latnum, longnu
 
 Usage: The script 01_censoring_adjustment.Rmd reads this synthetic file by default. To reproduce the actual analysis, obtain the genuine DHS file from dhsprogram.com and modify the script as described inside.
 
-Included data
+3. Included data
 
 - Adjusted covariate rasters (2000‑2015): GeoTIFF files at 5 km resolution – 16 covariates per year (after correlation filtering), plus a 5 km population raster and an inhabited area mask. Each raster includes a JSON metadata file.
 
@@ -61,7 +61,35 @@ Included data
 
 - LICENSE – CC BY 4.0.
 
-Requirements
+  4. Model performance summary (2000-2015)
+
+I provide `model_performance_2000_2015.xlsx` – a table of yearly validation metrics.  
+The file is also available on Zenodo as part of this deposit.
+
+ Sheet1 – Column descriptions
+
+| Column | Description |
+|--------|-------------|
+| Year | Calendar year |
+| Training set size | Observations used for training |
+| Validation set size | Observations used for hyperparameter tuning |
+| Test set size | Observations held out for final evaluation |
+| Bias correction (log scale) | Log-scale adjustment factor (negative = downward, positive = upward) |
+| Optimal k (validation) | Best k-parameter selected on validation data |
+| Test set coverage | Proportion of test locations with a valid prediction (0.8 to 1.0) |
+| Global prediction mean (unweighted) | Simple average of test-set predictions |
+| Global weighted mean | Weighted average of test-set predictions |
+| Global TRAIN mortality rate | Mortality rate from training data |
+| DHS mean | Reference mortality rate from Demographic and Health Surveys |
+
+ Important notes
+- Coverage: 2004 has 0.80 – 20 percent of test points had no prediction (likely missing covariates).
+- Bias correction varies widely (-0.93 to +0.14); interpret with caution.
+- The file contains only Sheet1 (Sheet2 and Sheet3 are empty).
+
+Use this table to assess model performance over time and to compare weighted predictions against DHS benchmarks.
+
+5. Requirements
 
 R version 4.0 or higher.
 
@@ -71,7 +99,7 @@ For INLA, use: install.packages("INLA", repos = "https://inla.r-inla-download.or
 
 See sessionInfo.txt for the exact environment used.
 
-File structure
+6. File structure
 
 .
 ├── README.md
@@ -94,7 +122,7 @@ File structure
     ├── 2000/
     └── 2015/
 
-Usage
+7. Usage
 
 1. Censoring adjustment (testing) – Run 01_censoring_adjustment.Rmd without any changes; it will use the included synthetic DHS data (synthetic_dhs.rds) and raw covariate rasters (not included) to demonstrate the workflow. To run with real data, obtain the genuine DHS file and the raw rasters, and modify the file paths as indicated in the script.
 
@@ -105,3 +133,4 @@ Usage
 License: MIT License
 
 Citation: BA Hailu (2026). Small Area Estimation of Under-Five Mortality at 5 km Resolution – Ethiopia (Covariate & Censoring Pipelines). Zenodo. https://zenodo.org/records/19654174 
+
