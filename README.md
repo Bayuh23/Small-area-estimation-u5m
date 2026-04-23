@@ -1,20 +1,20 @@
 Small Area Estimation of Under‑Five Mortality at 5 km Resolution – Covariate and Censoring Pipelines
 
+
 Author: Bayuh Asmamaw Hailu
 ORCID: 0000-0002-7810-2774
 Contact: bayuhasmamaw@gmail.com
+
 
 Overview
 
 This deposit contains two fully shared R Markdown scripts and example output rasters for small area estimation of under-five mortality in Ethiopia at 5 km resolution.
 
 Important note on Z-score statistics
-
 The covariate rasters in this deposit were standardised using global GBD reference means and standard deviations before masking to Ethiopia. Consequently, the Ethiopia-only mean is not zero and the standard deviation is not one.
-
 Relative comparisons and spatial patterns within Ethiopia are still valid. For absolute z-score interpretation (e.g., percentiles), re-standardise using each raster's own mean and SD (provided in the accompanying JSON metadata files).
-
 Covariates derived from satellite/ERA5 (NDVI, Runoff, etc.) were standardised after masking and have correct z-score properties (mean near 0, SD near 1).
+
 
 1. Scripts
 
@@ -35,33 +35,28 @@ covariate_adjustment.Rmd
 Third script (INLA model – NOT SHARED)
 Uses the outputs of the first two scripts. From the 16 covariates, it selects the best 12 based on Variance Inflation Factor (VIF) and correlation with mortality. It then performs small area estimation. The full code is private, but example outputs are provided.
 
+
 2. Data requirements – real data (NOT INCLUDED)
 
 For the covariate script (02_covariate_adjustment.Rmd): Raw rasters from ERA5, GBD, MODIS, WorldPop, Malaria Atlas Project, etc. Not included; users must obtain them.
-
 For the censoring script (01_censoring_adjustment.Rmd): Real DHS data file (all apend.dta) for Ethiopia. Restricted; must be requested from dhsprogram.com. A synthetic substitute is provided for testing the pipeline (see below).
 
  Synthetic DHS data (INCLUDED)
-
 To allow users to test 01_censoring_adjustment.Rmd without accessing restricted DHS data, we provide a fully synthetic dataset: data/synthetic_dhs.rds. This file mimics the structure of the real DHS file all apend.dta but contains no real survey responses – all values are randomly generated.
-
 Variables included: b5 (survival 0/1), b7, b19, b8, b2, b1, v001, latnum, longnum, v025, v201, b4, b0.
-
 Usage: The script 01_censoring_adjustment.Rmd reads this synthetic file by default. To reproduce the actual analysis, obtain the genuine DHS file from dhsprogram.com and modify the script as described inside.
+
 
 3. Included data
 
 - Adjusted covariate rasters (2000‑2015): GeoTIFF files at 5 km resolution – 16 covariates per year (after correlation filtering), plus a 5 km population raster and an inhabited area mask. Each raster includes a JSON metadata file.
-
 - Synthetic DHS data: data/synthetic_dhs.rds for testing the censoring pipeline.
-
 - Example final outputs (from the private INLA model): example_outputs/2000/ and example_outputs/2015/ with mortality rate and death count maps (u5m_rate_mean.tif, u5m_rate_lower95.tif, u5m_rate_upper95.tif, u5m_death_mean.tif, u5m_death_lower95.tif, u5m_death_upper95.tif).
-
 - sessionInfo.txt – full R environment used to develop the scripts.
-
 - LICENSE – CC BY 4.0.
 
-  4. Model performance summary (2000-2015)
+
+4.  Model performance summary (2000-2015)
 
 I provide `model_performance_2000_2015.xlsx` – a table of yearly validation metrics.  
 The file is also available on Zenodo as part of this deposit.
@@ -132,5 +127,5 @@ See sessionInfo.txt for the exact environment used.
 
 License: MIT License
 
-Citation: BA Hailu (2026). Small Area Estimation of Under-Five Mortality at 5 km Resolution – Ethiopia (Covariate & Censoring Pipelines). Zenodo. https://zenodo.org/records/19654174 
+Citation: BA Hailu (2026). Small Area Estimation of Under-Five Mortality at 5 km Resolution – Ethiopia (Covariate & Censoring Pipelines). Zenodo. (https://zenodo.org/records/19705359)
 
