@@ -127,5 +127,5 @@ See sessionInfo.txt for the exact environment used.
 
 License: MIT License
 
-Citation: BA Hailu (2026). Small Area Estimation of Under-Five Mortality at 5 km Resolution – Ethiopia (Covariate & Censoring Pipelines). Zenodo. (https://zenodo.org/records/19705359)
+Citation: BA Hailu (2026). Small Area Estimation of Under-Five Mortality at 5 km Resolution – Ethiopia (Covariate & Censoring Pipelines). Zenodo.  https://zenodo.org/records/19761620 
 
