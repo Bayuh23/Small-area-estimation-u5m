@@ -71,10 +71,9 @@ set.seed(123)
 # You MUST change them to point to your own DHS data file,
 # covariate rasters, and output directories before running.
 DHS_DATA_PATH <- "D:/new resea/DHS/Ethiopia/all apend.dta"
-COVARIATE_PATH <- "D:/Ethi covaraite raster/Ethiopia/"
+COVARIATE_PATH <- "D:/U5M/Covaraite original/"
 OUTPUT_BASE <- "D:/new resea/Ethiopia/"
 # Read DHS data using the variable
-data <- read_dta(DHS_DATA_PATH)
 # Define output directories
 CENSOR_DIR <- paste0(OUTPUT_BASE, "Mean for corrlation and censoring/")
 CENSOR_CENSOR_DIR <- paste0(CENSOR_DIR, "censor/")
@@ -88,6 +87,7 @@ for(dir in c(CENSOR_DIR, CENSOR_CENSOR_DIR, COVARIATE_STACK_DIR)) {
 ### 1.1.  DHS Data Preparation and Outcome Construction
 
 ```{r step2-handle-missing-child-age}
+data<-synthetic_dhs_200k
 # Replace missing child age using age at death variables.
 data$b19[is.na(data$b19)] <- data$b8[is.na(data$b19)] * 12
 data$b19[is.na(data$b19)] <- data$b7[is.na(data$b19)]
@@ -143,7 +143,6 @@ table(data$gc_birth_year)
 
 ```{r step7-load-raster-covariates}
 # Load environmental, climatic, and socio-demographic raster covariates.
-
 CHI   <- rast(paste0(COVARIATE_PATH, "chrips/mean_1.tif"))
 DEAR  <- rast(paste0(COVARIATE_PATH, "deareha/dear_mea.tif"))
 DPT   <- rast(paste0(COVARIATE_PATH, "dpt3/DPT_mean.tif"))
@@ -165,7 +164,6 @@ EDU1  <- rast(paste0(COVARIATE_PATH, "education.tif"))
 GRID  <- rast(paste0(COVARIATE_PATH, "grdi.tif"))
 ROAD  <- rast(paste0(COVARIATE_PATH, "road density Ethiopia.tif"))
 HF    <- rast(paste0(COVARIATE_PATH, "travle time to hf.tif"))
-
 cat("All covariate rasters loaded successfully\n")
 ```
 
@@ -434,7 +432,7 @@ corrplot(cor_matrix_reduced,
          number.cex = 0.6)
 
 dev.off()
-cat("✅ Correlation plot saved to:", paste0(CENSOR_DIR, "correlation_plot.png"), "\n")
+cat("Correlation plot saved to:", paste0(CENSOR_DIR, "correlation_plot.png"), "\n")
 ```
 
 ```{r step17-final-covariate-selection}
@@ -454,7 +452,7 @@ high_cor <- findCorrelation(cor_mat, cutoff = 0.7)
 
 # Create final covariate stack
 covar5km_fin <- covariates_5km2[[ -high_cor ]]
-cat("✅ Final covariates selected:", paste(names(covar5km_fin), collapse=", "), "\n")
+cat("Final covariates selected:", paste(names(covar5km_fin), collapse=", "), "\n")
 
 # Save final covariate stack
 writeRaster(covar5km_fin,
@@ -488,18 +486,18 @@ data$gc_birth_year <- eth_to_gc_year(data$b2, data$b1)
 data$Clu_id <- paste0(data$gc_birth_year, data$year, data$v001)
 
 # Recode mortality: 0 = alive, 1 = death
-cat("\n📊 Original mortality distribution:\n")
+cat("\n Original mortality distribution:\n")
 table(data$b5)
 data$b5 <- ifelse(data$b5 == 0, 1,
                   ifelse(data$b5 == 1, 0, data$b5))
-cat("\n📊 Recoded mortality (1 = death):\n")
+cat("\n Recoded mortality (1 = death):\n")
 table(data$b5)
 
 # Select only important variables
 cens <- data[, c("b7", "b19", "b4", "v025", "v201", "b0", 
                  "Clu_id", "b5", "latnum", "longnum", "birth_year")]
 
-cat("✅ Censoring dataset prepared with", nrow(cens), "rows\n")
+cat(" Censoring dataset prepared with", nrow(cens), "rows\n")
 ```
 
 
@@ -512,12 +510,12 @@ cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("STEP: EXTRACTING RASTER COVARIATES FOR DHS CLUSTERS\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
 
-# 1. Load stacked raster
-cat("\n📊 STEP 1: LOADING RASTER STACK\n")
+# Load stacked raster
+cat("\n STEP 1: LOADING RASTER STACK\n")
 cova_5km_cens_SHAP <- rast(paste0(CENSOR_DIR, "covar5km_Cens_SHAP.tif"))
 
 # Check raster properties
-cat("✅ Raster loaded successfully\n")
+cat(" Raster loaded successfully\n")
 cat("  Number of layers:", nlyr(cova_5km_cens_SHAP), "\n")
 cat("  Layer names:", paste(names(cova_5km_cens_SHAP), collapse=", "), "\n")
 cat("  Raster CRS:", crs(cova_5km_cens_SHAP), "\n")
@@ -527,51 +525,51 @@ raster_ext <- ext(cova_5km_cens_SHAP)
 cat("  Raster extent: xmin =", raster_ext[1], ", xmax =", raster_ext[2], 
     ", ymin =", raster_ext[3], ", ymax =", raster_ext[4], "\n")
 
-# 2. Prepare DHS data
-cat("\n📊 STEP 2: PREPARING DHS DATA\n")
+# Prepare DHS data
+cat("\n STEP 2: PREPARING DHS DATA\n")
 cat("  Original data rows:", nrow(cens), "\n")
 
 # Check for missing coordinates
 missing_coords <- sum(is.na(cens$longnum) | is.na(cens$latnum))
 if(missing_coords > 0) {
-  cat("  ⚠️ Warning:", missing_coords, "rows have missing coordinates\n")
+  cat("  Warning:", missing_coords, "rows have missing coordinates\n")
   cens_clean <- cens[!is.na(cens$longnum) & !is.na(cens$latnum), ]
   cat("  → Rows after removing missing coordinates:", nrow(cens_clean), "\n")
 } else {
   cens_clean <- cens
-  cat("  ✅ No missing coordinates\n")
+  cat("  No missing coordinates\n")
 }
 
-# 3. Convert to spatial points
-cat("\n📊 STEP 3: CREATING SPATIAL POINTS\n")
+#  Convert to spatial points
+cat("\n STEP 3: CREATING SPATIAL POINTS\n")
 pts <- vect(cens_clean, geom = c("longnum", "latnum"), crs = "EPSG:4326")
-cat("  ✅ Spatial points created:", nrow(pts), "\n")
+cat("  Spatial points created:", nrow(pts), "\n")
 cat("  Points CRS:", crs(pts), "\n")
 
-# 4. Check CRS alignment
-cat("\n📊 STEP 4: CHECKING CRS ALIGNMENT\n")
+#  Check CRS alignment
+cat("\n STEP 4: CHECKING CRS ALIGNMENT\n")
 if(crs(pts) != crs(cova_5km_cens_SHAP)) {
-  cat("  ⚠️ CRS mismatch - reprojecting points to match raster\n")
+  cat("   CRS mismatch - reprojecting points to match raster\n")
   pts <- project(pts, crs(cova_5km_cens_SHAP))
-  cat("  ✅ Points reprojected. New CRS:", crs(pts), "\n")
+  cat("  Points reprojected. New CRS:", crs(pts), "\n")
 } else {
-  cat("  ✅ CRS match\n")
+  cat("  CRS match\n")
 }
 
-# 5. Extract values
-cat("\n📊 STEP 5: EXTRACTING RASTER VALUES\n")
+#  Extract values
+cat("\n STEP 5: EXTRACTING RASTER VALUES\n")
 cat("  This may take a moment...\n")
 vals <- terra::extract(cova_5km_cens_SHAP, pts)
-cat("  ✅ Extraction complete\n")
+cat(" Extraction complete\n")
 cat("  Extracted values shape:", nrow(vals), "rows,", ncol(vals)-1, "columns\n")
 
-# 6. Remove ID column
+#  Remove ID column
 vals_data <- vals[, -1]
 
-# 7. Check for NA values
+#  Check for NA values
 na_count <- colSums(is.na(vals_data))
 if(any(na_count > 0)) {
-  cat("\n  ⚠️ Warning: Some extracted values are NA\n")
+  cat("\n   Warning: Some extracted values are NA\n")
   na_summary <- data.frame(
     Layer = names(na_count),
     NA_count = na_count,
@@ -579,37 +577,37 @@ if(any(na_count > 0)) {
   )
   print(na_summary[na_summary$NA_count > 0, ])
 } else {
-  cat("\n  ✅ No NA values in extracted data\n")
+  cat("\n  No NA values in extracted data\n")
 }
 
-# 8. Combine with original data
-cat("\n📊 STEP 6: COMBINING WITH ORIGINAL DATA\n")
+#  Combine with original data
+cat("\n STEP 6: COMBINING WITH ORIGINAL DATA\n")
 cens_covariates <- cbind(cens_clean, vals_data)
-cat("  ✅ Final dataset dimensions:", nrow(cens_covariates), "rows,", 
+cat("  Final dataset dimensions:", nrow(cens_covariates), "rows,", 
     ncol(cens_covariates), "columns\n")
 
-# 9. Summary statistics
-cat("\n📊 SUMMARY STATISTICS:\n")
+#  Summary statistics
+cat("\n SUMMARY STATISTICS:\n")
 cat("  Original rows in DHS data:", nrow(cens), "\n")
 cat("  Rows with complete coordinates:", nrow(cens_clean), "\n")
 cat("  Rows with extracted values:", nrow(cens_covariates), "\n")
 if(nrow(cens_covariates) == nrow(cens_clean)) {
-  cat("  ✅ All rows preserved\n")
+  cat("  All rows preserved\n")
 } else {
-  cat("  ⚠️ Row count mismatch\n")
+  cat("   Row count mismatch\n")
 }
 
-# 10. Save the result - FIXED: Using CENSOR_DIR only, no hardcoded paths
-cat("\n📊 STEP 7: SAVING RESULTS\n")
+#  Save the result - FIXED: Using CENSOR_DIR only, no hardcoded paths
+cat("\n STEP 7: SAVING RESULTS\n")
 saveRDS(cens_covariates, paste0(CENSOR_DIR, "cens_covariates_extracted.rds"))
 write.csv(cens_covariates, paste0(CENSOR_DIR, "cens_covariates_extracted.csv"), row.names = FALSE)
-cat("\n✅ EXTRACTION COMPLETE\n")
+cat("\n EXTRACTION COMPLETE\n")
 cat("  Files saved to:", CENSOR_DIR, "\n")
 cat("  - cens_covariates_extracted.rds\n")
 cat("  - cens_covariates_extracted.csv\n")
 
 # Optional: Quick check of first few rows
-cat("\n📊 FIRST FEW ROWS OF EXTRACTED DATA:\n")
+cat("\n FIRST FEW ROWS OF EXTRACTED DATA:\n")
 print(head(cens_covariates[, 1:10]))
 ```
 
@@ -619,11 +617,11 @@ print(head(cens_covariates[, 1:10]))
 
 
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
-cat("STEP: HANDLING MISSING COVARIATES AND ADJUSTING CENSORING\n")
+cat(" HANDLING MISSING COVARIATES AND ADJUSTING CENSORING\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
 
 # 1. CHECK CURRENT DATA STATUS
-cat("\n📊 STEP 1: CURRENT DATA STATUS\n")
+cat("\n STEP 1: CURRENT DATA STATUS\n")
 
 # Check mortality variable
 cat("\nMortality distribution (b5):\n")
@@ -639,11 +637,11 @@ cat("\nVariable names:\n")
 print(names(cens_covariates))
 
 # 2. FIX EXTRACTION ISSUE
-cat("\n📊 STEP 2: EXTRACTING RASTER VALUES (FIXED)\n")
+cat("\n STEP 2: EXTRACTING RASTER VALUES (FIXED)\n")
 
 # Ensure we're using the correct extract function
 if (!exists("cova_5km_cens_SHAP") | !exists("pts")) {
-  stop("❌ Required objects (cova_5km_cens_SHAP or pts) not found")
+  stop("Required objects (cova_5km_cens_SHAP or pts) not found")
 }
 
 # Explicitly use terra::extract
@@ -652,16 +650,16 @@ v <- terra::extract(cova_5km_cens_SHAP, pts)
 
 # Check if extraction worked
 if (inherits(v, "try-error") || is.null(v)) {
-  stop("❌ Extraction failed. Check raster and point objects.")
+  stop("Extraction failed. Check raster and point objects.")
 }
 
-cat("✅ Extraction successful. Dimensions:", dim(v), "\n")
+cat("Extraction successful. Dimensions:", dim(v), "\n")
 
 # Remove ID column (first column)
 v <- v[, -1]
 
 # 3. HANDLE NA VALUES IN EXTRACTED COVARIATES
-cat("\n📊 STEP 3: HANDLING NA VALUES IN COVARIATES\n")
+cat("\n STEP 3: HANDLING NA VALUES IN COVARIATES\n")
 
 # Check NAs in extracted values
 na_in_extract <- colSums(is.na(v))
@@ -682,13 +680,13 @@ for (col in names(v_filled)) {
 
 # Verify no NAs remain
 if (sum(is.na(v_filled)) == 0) {
-  cat("✅ All covariate NAs successfully imputed\n")
+  cat("All covariate NAs successfully imputed\n")
 } else {
-  cat("⚠️ Warning:", sum(is.na(v_filled)), "NAs remain\n")
+  cat(" Warning:", sum(is.na(v_filled)), "NAs remain\n")
 }
 
-# 4. COMBINE WITH ORIGINAL DATA
-cat("\n📊 STEP 4: COMBINING WITH ORIGINAL DATA\n")
+#  COMBINE WITH ORIGINAL DATA
+cat("\n STEP 4: COMBINING WITH ORIGINAL DATA\n")
 
 # Use cens_clean from previous step (should exist)
 if (!exists("cens_clean")) {
@@ -697,10 +695,10 @@ if (!exists("cens_clean")) {
 }
 
 cens_covariates <- cbind(cens_clean, v_filled)
-cat("✅ Combined dataset dimensions:", dim(cens_covariates), "\n")
+cat("Combined dataset dimensions:", dim(cens_covariates), "\n")
 
 # 5. HANDLE MISSING VALUES IN ORIGINAL VARIABLES
-cat("\n📊 STEP 5: HANDLING MISSING VALUES IN ORIGINAL VARIABLES\n")
+cat("\n STEP 5: HANDLING MISSING VALUES IN ORIGINAL VARIABLES\n")
 
 # Handle missing b7 (age at death/current age)
 if ("b7" %in% names(cens_covariates)) {
@@ -722,8 +720,8 @@ if ("b19" %in% names(cens_covariates)) {
   }
 }
 
-# 6. ADJUST MORTALITY VARIABLE
-cat("\n📊 STEP 6: ADJUSTING MORTALITY VARIABLE\n")
+#  ADJUST MORTALITY VARIABLE
+cat("\n ADJUSTING MORTALITY VARIABLE\n")
 
 # Children who reached age 5 or older should be considered alive (b5 = 0)
 if ("b7" %in% names(cens_covariates) && "b5" %in% names(cens_covariates)) {
@@ -738,18 +736,18 @@ print(table(cens_covariates$b5))
 cat("  Deaths (1):", sum(cens_covariates$b5 == 1, na.rm = TRUE), "\n")
 cat("  Alive (0):", sum(cens_covariates$b5 == 0, na.rm = TRUE), "\n")
 
-# 7. FINAL MISSING VALUE CHECK
-cat("\n📊 STEP 7: FINAL MISSING VALUE CHECK\n")
+#  FINAL MISSING VALUE CHECK
+cat("\n STEP 7: FINAL MISSING VALUE CHECK\n")
 final_na <- colSums(is.na(cens_covariates))
 if (sum(final_na) == 0) {
-  cat("✅ No missing values remaining in dataset\n")
+  cat(" No missing values remaining in dataset\n")
 } else {
-  cat("⚠️ Missing values remain in:\n")
+  cat(" Missing values remain in:\n")
   print(final_na[final_na > 0])
 }
 
-# 8. SELECT RELEVANT VARIABLES FOR MODELING
-cat("\n📊 STEP 8: SELECTING VARIABLES FOR MODELING\n")
+# SELECT RELEVANT VARIABLES FOR MODELING
+cat("\n STEP 8: SELECTING VARIABLES FOR MODELING\n")
 
 # Define variables to keep (adjust based on needs)
 vars_to_keep <- c(
@@ -770,7 +768,7 @@ existing_vars <- intersect(vars_to_keep, names(cens_covariates))
 missing_vars <- setdiff(vars_to_keep, names(cens_covariates))
 
 if (length(missing_vars) > 0) {
-  cat("⚠️ Warning: These variables not found:\n")
+  cat(" Warning: These variables not found:\n")
   print(missing_vars)
 }
 
@@ -778,11 +776,11 @@ if (length(missing_vars) > 0) {
 cens_covariates_final <- cens_covariates %>%
   select(all_of(existing_vars))
 
-cat("✅ Final dataset dimensions:", dim(cens_covariates_final), "\n")
+cat(" Final dataset dimensions:", dim(cens_covariates_final), "\n")
 cat("Variables selected:", paste(names(cens_covariates_final), collapse=", "), "\n")
 
-# 9. SAVE FINAL DATASET
-cat("\n📊 STEP 9: SAVING FINAL DATASET\n")
+# SAVE FINAL DATASET
+cat("\n  SAVING FINAL DATASET\n")
 
 # Save as RDS (binary format, preserves all R data types)
 saveRDS(cens_covariates_final, 
@@ -791,7 +789,7 @@ write.csv(cens_covariates_final,
           paste0(CENSOR_DIR, "Ethio_cens_SHAP_final.csv"), 
           row.names = FALSE)
 
-cat("✅ Files saved:\n")
+cat(" Files saved:\n")
 cat("  - Ethio_cens_SHAP_final.rds\n")
 cat("  - Ethio_cens_SHAP_final.csv\n")
 
@@ -800,17 +798,17 @@ cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("FINAL DATASET SUMMARY\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
 
-cat("\n📊 Dataset dimensions:", dim(cens_covariates_final), "\n")
-cat("\n📊 Mortality distribution:\n")
+cat("\n Dataset dimensions:", dim(cens_covariates_final), "\n")
+cat("\n Mortality distribution:\n")
 print(table(cens_covariates_final$b5))
-cat("\n📊 Birth year range:", 
+cat("\n Birth year range:", 
     min(cens_covariates_final$birth_year, na.rm=TRUE), "to",
     max(cens_covariates_final$birth_year, na.rm=TRUE), "\n")
 
-cat("\n📊 First few rows:\n")
+cat("\n First few rows:\n")
 print(head(cens_covariates_final[, 1:8]))
 
-cat("\n✅ DATA PREPARATION COMPLETE - READY FOR RSF MODELING\n")
+cat("\n ATA PREPARATION COMPLETE - READY FOR RSF MODELING\n")
 
 # Verify essential objects exist
 if(!exists("cens_clean")) stop("❌ cens_clean not created - check previous steps")
@@ -824,9 +822,9 @@ if(!exists("cova_5km_cens_SHAP")) stop("❌ cova_5km_cens_SHAP not loaded")
 if(exists("cens") && nrow(cens) > 0) {
   cens_sub <- cens %>% filter(b19 < 60)
   surv_obj <- Surv(time = cens_sub$b7, event = cens_sub$b5)
-  cat("✅ Survival object created with", nrow(cens_sub), "children\n")
+  cat(" urvival object created with", nrow(cens_sub), "children\n")
 } else {
-  cat("⚠️ 'cens' object not found - skipping survival object creation\n")
+  cat(" 'cens' object not found - skipping survival object creation\n")
 }
 ```
 
@@ -943,7 +941,7 @@ To select the best model among CoxPH, RSF, and GBM. Evaluate predictive performa
 
 ```{r step25-model-comparison}
 # Compare models using C-index, Brier score, and time-dependent ROC.
-# 1. CONCORDANCE INDEX (C-INDEX)
+# CONCORDANCE INDEX (C-INDEX)
 cindex_cox <- rcorr.cens(cens_sub$pred_cox_prob, Surv(cens_sub$b7, cens_sub$b5))
 cindex_rsf <- rcorr.cens(cens_sub$pred_rsf_prob, Surv(cens_sub$b7, cens_sub$b5))
 cindex_gbm <- rcorr.cens(cens_sub$pred_gbm_prob, Surv(cens_sub$b7, cens_sub$b5))
@@ -1105,7 +1103,7 @@ cat(paste(rep("═", 70), collapse = ""), "\n")
 
 ```{r Step27}
 
-# CHUNK 5: PREDICT FOR CHILDREN STILL UNDER AGE 5
+# PREDICT FOR CHILDREN STILL UNDER AGE 5
 
 # Methodological purpose:
 # Children still under age 5 (b19 < 60) need censoring adjustment.
@@ -1163,7 +1161,7 @@ cat("This cohort will contribute most to censoring adjustment.\n")
 
 ```{r step28}
 
-# CHUNK 6: OPTIMAL THRESHOLD SELECTION VIA ROC ANALYSIS
+# OPTIMAL THRESHOLD SELECTION VIA ROC ANALYSIS
 
 # Methodological purpose:
 # Find threshold that maximizes sensitivity + specificity
@@ -1220,7 +1218,7 @@ under_5_current$pred_death <- ifelse(under_5_current$pred_risk >= optimal_thresh
 
 ```{r step29}
 
-# CHUNK 7: IDENTIFY CENSORED CHILDREN PREDICTED TO DIE
+#IDENTIFY CENSORED CHILDREN PREDICTED TO DIE
 
 # Methodological purpose:
 # Censored children predicted to die represent "missing deaths"
@@ -1272,7 +1270,7 @@ cat(sprintf("  Percent increase in deaths: %.1f%%\n",
 
 ```{r step30}
 
-# CHUNK 8: CREATE ADJUSTED MORTALITY VARIABLE
+# CREATE ADJUSTED MORTALITY VARIABLE
 
 # Methodological purpose:
 # Create new mortality variable that corrects for informative censoring
@@ -1332,7 +1330,7 @@ print(adjustment_by_cohort)
 
 ```{r step31}
 
-# CHUNK 9: VALIDATE ADJUSTMENT ACROSS COHORTS
+# VALIDATE ADJUSTMENT ACROSS COHORTS
 
 # Methodological purpose:
 # Validate that adjustment correlates with censoring rates.
@@ -1371,13 +1369,13 @@ if(validation$Rate_Change[validation$birth_cohort == "2015-2019"] >
    validation$Rate_Change[validation$birth_cohort == "2000-2004"]) {
   cat("✓ VALID: Recent cohort shows larger adjustment than oldest cohort\n")
 } else {
-  cat("⚠️ CHECK: Adjustment pattern may need investigation\n")
+  cat(" CHECK: Adjustment pattern may need investigation\n")
 }
 ```
 
 ```{r step32}
 
-# CHUNK 10: SAVE FINAL ADJUSTED DATASETS
+# SAVE FINAL ADJUSTED DATASETS
 
 # Save datasets for subsequent Bayesian modeling
 
@@ -1427,7 +1425,7 @@ cat(sprintf("\nDataset size: %d children born 2000-2019\n", nrow(final_data)))
 
 ```{r step33}
 
-# CHUNK 11: FINAL SUMMARY - 2000-2019 COHORTS
+# FINAL SUMMARY - 2000-2019 COHORTS
 
 
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
@@ -1518,7 +1516,7 @@ cat("Parallel processing enabled using", getOption("rf.cores"), "cores\n")
 # OPTIONAL: FAST MODE FOR TESTING - SET TO FALSE FOR FINAL ANALYSIS
 FAST_MODE <- FALSE  # Change to TRUE only for quick testing (5-10 min runtime)
 if(FAST_MODE) {
-  cat("⚠️ FAST MODE ENABLED - Using 50% sample and minimal trees\n")
+  cat(" FAST MODE ENABLED - Using 50% sample and minimal trees\n")
   cat("  Results not suitable for publication - testing only!\n")
 }
 
@@ -1536,20 +1534,18 @@ validation_log$warnings <- c()
 
 ```{r step35}
 
-# STEP 1: FILTER DATA WITH COVERAGE VALIDATION
-
-
+#  FILTER DATA WITH COVERAGE VALIDATION
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("STEP 1: FILTERING TO 2000-2019 WITH COVERAGE VALIDATION\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
 
 # Check if cens_covariates exists
 if(!exists("cens_covariates")) {
-  stop("❌ Object 'cens_covariates' not found. Please run covariate extraction first.")
+  stop(" bject 'cens_covariates' not found. Please run covariate extraction first.")
 }
 
 # VALIDATION 1.1: Document original data structure
-cat("\n📊 ORIGINAL DATA VALIDATION:\n")
+cat("\n ORIGINAL DATA VALIDATION:\n")
 cat("  Total rows:", nrow(cens_covariates), "\n")
 cat("  Birth year range:", min(cens_covariates$birth_year, na.rm=TRUE), 
     "to", max(cens_covariates$birth_year, na.rm=TRUE), "\n")
@@ -1560,22 +1556,22 @@ if("survey_year" %in% names(cens_covariates)) {
 # Filter to birth years 2000-2019
 cens_2000_2019 <- cens_covariates %>%
   filter(birth_year >= 2000 & birth_year <= 2019)
-# VALIDATION 1.2: Check coverage of all birth years
+# VALIDATION Check coverage of all birth years
 yearly_counts <- table(cens_2000_2019$birth_year)
 years_present <- as.numeric(names(yearly_counts))
 expected_years <- 2000:2019
 missing_years <- setdiff(expected_years, years_present)
-cat("\n📊 COVERAGE VALIDATION (2000-2019):\n")
+cat("\n COVERAGE VALIDATION (2000-2019):\n")
 cat("  Total rows:", nrow(cens_2000_2019), "\n")
 cat("  Years present:", length(years_present), "of 20\n")
 if(length(missing_years) == 0) {
-  cat("  ✅ COMPLETE COVERAGE: All 20 birth years represented\n")
+  cat("  OMPLETE COVERAGE: All 20 birth years represented\n")
 } else {
-  cat("  ⚠️ MISSING YEARS:", paste(missing_years, collapse=", "), "\n")
+  cat("  MISSING YEARS:", paste(missing_years, collapse=", "), "\n")
   validation_log$warnings <- c(validation_log$warnings, "Missing birth years detected")
 }
-# VALIDATION 1.3: Sample size by year
-cat("\n📊 SAMPLE SIZE BY BIRTH YEAR:\n")
+# VALIDATION  Sample size by year
+cat("\n SAMPLE SIZE BY BIRTH YEAR:\n")
 print(yearly_counts)
 # OPTIMIZATION: If FAST_MODE, take 50% random sample
 if(FAST_MODE) {
@@ -1583,7 +1579,7 @@ if(FAST_MODE) {
   sample_size_before <- nrow(cens_2000_2019)
   cens_2000_2019 <- cens_2000_2019 %>%
     sample_frac(0.5)
-  cat("\n⚠️ FAST MODE: Reduced from", sample_size_before, "to", nrow(cens_2000_2019), "rows\n")
+  cat("\n FAST MODE: Reduced from", sample_size_before, "to", nrow(cens_2000_2019), "rows\n")
 }
 # Define essential variables and covariates
 essential_vars <- c("b7", "b19", "b5", "birth_year")
@@ -1593,7 +1589,7 @@ covariate_names <- c("nili", "dear", "Slo", "era5", "Plas", "Pm25", "SW",
 # Check which covariates are present
 present_covariates <- covariate_names[covariate_names %in% names(cens_2000_2019)]
 missing_covariates <- covariate_names[!covariate_names %in% names(cens_2000_2019)]
-cat("\n📊 COVARIATE AVAILABILITY:\n")
+cat("\n COVARIATE AVAILABILITY:\n")
 cat("  Available:", length(present_covariates), "of", length(covariate_names), "\n")
 if(length(missing_covariates) > 0) {
   cat("  Missing:", paste(missing_covariates, collapse=", "), "\n")
@@ -1607,7 +1603,7 @@ cens_2000_2019$b5_original <- cens_2000_2019$b5
 ```
 
 ```{r step36}
-# STEP 2: CREATE 5-YEAR BIRTH COHORTS WITH VALIDATION
+# CREATE 5-YEAR BIRTH COHORTS WITH VALIDATION
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("STEP 2: CREATING 5-YEAR BIRTH COHORTS WITH VALIDATION\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
@@ -1619,11 +1615,11 @@ cens_2000_2019$birth_cohort <- cut(cens_2000_2019$birth_year,
                                    labels = cohort_labels, 
                                    include.lowest = TRUE, 
                                    right = FALSE)
-# VALIDATION 2.1: Cohort sample sizes
+# VALIDATION Cohort sample sizes
 cohort_dist <- table(Cohort = cens_2000_2019$birth_cohort)
 cat("\n📊 COHORT SAMPLE SIZES:\n")
 print(cohort_dist)
-# VALIDATION 2.2: Cohort-specific mortality and censoring
+# VALIDATION Cohort-specific mortality and censoring
 cohort_stats <- cens_2000_2019 %>%
   group_by(birth_cohort) %>%
   summarise(
@@ -1635,28 +1631,27 @@ cohort_stats <- cens_2000_2019 %>%
     .groups = 'drop'
   )
 
-cat("\n📊 COHORT MORTALITY AND CENSORING PATTERNS:\n")
+cat("\n COHORT MORTALITY AND CENSORING PATTERNS:\n")
 print(cohort_stats)
 
 # VALIDATION 2.3: Check for adequate events per cohort
 min_events <- min(cohort_stats$Deaths)
 if(min_events < 50) {
-  cat("\n⚠️ WARNING: Cohort with <50 events detected (", min_events, ")\n")
+  cat("\n  WARNING: Cohort with <50 events detected (", min_events, ")\n")
   cat("  Results may be unstable for this cohort\n")
   validation_log$warnings <- c(validation_log$warnings, "Cohort with <50 events")
 } else {
-  cat("\n✅ All cohorts have ≥50 events - adequate for stable estimation\n")
+  cat("\n All cohorts have ≥50 events - adequate for stable estimation\n")
 }
 
 ```
 
 ```{r step37}
 
-# STEP 3: HANDLE MISSING VALUES WITH VALIDATION
-
+# HANDLE MISSING VALUES WITH VALIDATION
 
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
-cat("STEP 3: MISSING DATA HANDLING WITH VALIDATION\n")
+cat("MISSING DATA HANDLING WITH VALIDATION\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
 
 # VALIDATION 3.1: Assess missing data patterns
@@ -1671,7 +1666,7 @@ total_missing_cells <- sum(missing_summary$n_missing)
 total_cells <- nrow(cens_2000_2019) * length(present_covariates)
 overall_missing_pct <- 100 * total_missing_cells / total_cells
 
-cat("\n📊 MISSING DATA ASSESSMENT:\n")
+cat("\n MISSING DATA ASSESSMENT:\n")
 cat(sprintf("  Overall missing: %.2f%% of covariate cells\n", overall_missing_pct))
 
 if(nrow(missing_summary) > 0) {
@@ -1697,18 +1692,18 @@ if(nrow(missing_summary) > 0) {
     }) %>%
     ungroup()
   
-  # VALIDATION 3.2: Verify imputation
+  # VALIDATION Verify imputation
   remaining_na <- cens_2000_2019 %>%
     summarise(across(all_of(present_covariates), ~sum(is.na(.)))) %>%
     sum()
   
   if(remaining_na == 0) {
-    cat("  ✅ All numeric covariates successfully imputed\n")
+    cat("  All numeric covariates successfully imputed\n")
   } else {
-    cat("  ⚠️", remaining_na, "missing values remain - RSF will handle via na.impute\n")
+    cat("  ", remaining_na, "missing values remain - RSF will handle via na.impute\n")
   }
 } else {
-  cat("\n  ✅ No missing values in covariates\n")
+  cat("\n  No missing values in covariates\n")
 }
 
 # Handle missing in essential survival variables
@@ -1725,7 +1720,7 @@ essential_na_after <- sum(is.na(cens_2000_2019$b7) |
                           is.na(cens_2000_2019$b5) | 
                           is.na(cens_2000_2019$birth_cohort))
 
-cat("\n📊 ESSENTIAL VARIABLES VALIDATION:\n")
+cat("\n ESSENTIAL VARIABLES VALIDATION:\n")
 cat(sprintf("  Cases removed due to missing essentials: %d\n", 
             essential_na_before - essential_na_after))
 cat(sprintf("  Final dataset for modeling: %d children\n", nrow(cens_2000_2019)))
@@ -1757,7 +1752,7 @@ if(FAST_MODE) {
   nsplit_val <- 5
 }
 
-cat("\n📊 MODEL CONFIGURATION:\n")
+cat("\n MODEL CONFIGURATION:\n")
 cat("  Training samples:", nrow(model_data), "\n")
 cat("  Covariates:", length(present_covariates), "\n")
 cat("  Trees:", ntree_val, "\n")
@@ -1771,10 +1766,8 @@ formula_str <- paste(
   paste(present_covariates, collapse = " + "),
   "+ strata(birth_cohort)"
 )
-
 cat("\n  Formula: Surv(b7, b5) ~ [", length(present_covariates),
     "covariates] + strata(birth_cohort)\n")
-
 # Time model execution
 start_time <- Sys.time()
 ```
@@ -1799,7 +1792,7 @@ rsf_model_2000_2019 <- rfsrc(
 ```{r step40}
 end_time <- Sys.time()
 runtime <- difftime(end_time, start_time, units = "mins")
-cat("\n📊 MODEL FITTING COMPLETE:\n")
+cat("\n MODEL FITTING COMPLETE:\n")
 cat(sprintf("  Runtime: %.1f minutes\n", runtime))
 # Extract OOB error
 oob_errors <- rsf_model_2000_2019$err.rate
@@ -1814,7 +1807,7 @@ cat(sprintf("  OOB error rate at %d trees: %.4f\n",
   rsf_model_2000_2019,
   paste0(output_dir, "rsf_model_2000_2019.rds")
 )
-cat("\n✅ Model saved to:",
+cat("\n Model saved to:",
     paste0(output_dir, "rsf_model_2000_2019.rds"), "\n")
 ```
 
@@ -1824,35 +1817,35 @@ model_path <- paste0(CENSOR_CENSOR_DIR, "rsf_model_2000_2019.rds")
 
 if(file.exists(model_path)) {
   rsf_model_2000_2019 <- readRDS(model_path)
-  cat("✅ Model loaded from:", model_path, "\n")
+  cat("odel loaded from:", model_path, "\n")
   oob_errors <- rsf_model_2000_2019$err.rate
 } else {
-  stop("❌ Model file not found at:", model_path, "\n",
+  stop("odel file not found at:", model_path, "\n",
        "Please run Step40 first to fit the model.")
 }
 ```
 
 ```{r step43}
-# VALIDATION 4.1: OOB ERROR DIAGNOSTIC
-cat("\n📊 OOB ERROR DIAGNOSTIC:\n")
+# VALIDATION  OOB ERROR DIAGNOSTIC
+cat("\n OOB ERROR DIAGNOSTIC:\n")
 na_oob <- sum(is.na(oob_errors))
 cat("  NA values in OOB error:", na_oob, "\n")
 if(na_oob > 0){
-  cat("  ⚠️ Some trees produced NA OOB errors (common in survival forests)\n")
+  cat("   Some trees produced NA OOB errors (common in survival forests)\n")
 }
 # Remove NA values for convergence testing
 oob_errors_clean <- na.omit(oob_errors)
-# VALIDATION 4.2: OOB CONVERGENCE CHECK
-cat("\n📊 CONVERGENCE VALIDATION:\n")
+# VALIDATION OOB CONVERGENCE CHECK
+cat("\n CONVERGENCE VALIDATION:\n")
 if(length(oob_errors_clean) >= 50){
   error_diff_last_50 <- abs(
     tail(oob_errors_clean, 1) -
     oob_errors_clean[length(oob_errors_clean) - 49]
   )
   if(error_diff_last_50 < 0.01){
-    cat("  ✅ OOB error stabilized (change < 0.01 over last 50 trees)\n")
+    cat("  OB error stabilized (change < 0.01 over last 50 trees)\n")
   } else {
-    cat("  ⚠️ OOB error may not be fully stabilized (change =",
+    cat("  OOB error may not be fully stabilized (change =",
         round(error_diff_last_50,4), "over last 50 trees)\n")
     validation_log$warnings <- c(
       validation_log$warnings,
@@ -1860,14 +1853,14 @@ if(length(oob_errors_clean) >= 50){
     )
   }
 } else {
-  cat("  ⚠️ Insufficient non-NA OOB errors to evaluate convergence\n")
+  cat("  Insufficient non-NA OOB errors to evaluate convergence\n")
   validation_log$warnings <- c(
     validation_log$warnings,
     "OOB convergence check skipped"
   )
 }
-# VALIDATION 4.3: TREE SUFFICIENCY TEST
-cat("\n📊 TREE SUFFICIENCY TEST:\n")
+# VALIDATION TREE SUFFICIENCY TEST
+cat("\n TREE SUFFICIENCY TEST:\n")
 if(length(oob_errors_clean) >= 100){
   err_100 <- oob_errors_clean[100]
   err_final <- tail(oob_errors_clean, 1)
@@ -1876,14 +1869,14 @@ if(length(oob_errors_clean) >= 100){
   error_reduction <- (err_100 - err_final) / err_100 * 100
   cat(sprintf("  Improvement after 100 trees: %.1f%%\n", error_reduction))
    if(error_reduction < 5){
-    cat("  ✅ Tree count appears sufficient\n")
+    cat("  ree count appears sufficient\n")
   } else {
-    cat("  ⚠️ Consider increasing ntree (model still improving)\n")
+    cat("  Consider increasing ntree (model still improving)\n")
   }
 } else {
-  cat("  ⚠️ Tree sufficiency test skipped (insufficient OOB data)\n")
+  cat("  Tree sufficiency test skipped (insufficient OOB data)\n")
 }
-# VALIDATION 4.4: VARIABLE IMPORTANCE
+# VALIDATION VARIABLE IMPORTANCE
 if(!is.null(rsf_model_2000_2019$importance)){
   imp <- sort(rsf_model_2000_2019$importance, decreasing = TRUE)
   imp_df <- data.frame(
@@ -1903,7 +1896,7 @@ cat(paste(rep("═", 70), collapse = ""), "\n\n")
 
 
 ```{r step44}
-# STEP 5: PREDICT FOR UNDER-5 CHILDREN
+# PREDICT FOR UNDER-5 CHILDREN
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("STEP 5: PREDICTING FOR UNDER-5 CHILDREN\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
@@ -1912,7 +1905,7 @@ cat(paste(rep("═", 70), collapse = ""), "\n")
 under_5_current <- cens_2000_2019 %>%
   filter(b19 < 60)
 
-cat("\n📊 UNDER-5 POPULATION:\n")
+cat("\n UNDER-5 POPULATION:\n")
 cat(sprintf("  Total under-5 children: %d\n", nrow(under_5_current)))
 cat(sprintf("  Already died: %d (%.1f%%)\n", 
     sum(under_5_current$b5 == 1),
@@ -1938,7 +1931,7 @@ under_5_current$pred_survival <- rsf_pred$survival[, time_index]
 under_5_current$pred_risk <- 1 - under_5_current$pred_survival
 
 # VALIDATION 5.1: Check prediction distribution
-cat("\n📊 PREDICTION DISTRIBUTION:\n")
+cat("\n PREDICTION DISTRIBUTION:\n")
 cat("  Risk range:", round(min(under_5_current$pred_risk, na.rm=TRUE), 4), 
     "to", round(max(under_5_current$pred_risk, na.rm=TRUE), 4), "\n")
 cat("  Mean risk:", round(mean(under_5_current$pred_risk, na.rm=TRUE), 4), "\n")
@@ -1947,18 +1940,16 @@ cat("  Median risk:", round(median(under_5_current$pred_risk, na.rm=TRUE), 4), "
 ```
 
 ```{r step45}
-# STEP 6: CALIBRATED THRESHOLD SELECTION USING EXTERNAL BENCHMARK
+#  CALIBRATED THRESHOLD SELECTION USING EXTERNAL BENCHMARK
 # (REPLACES the Youden's J approach)
 
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("STEP 6: CALIBRATED THRESHOLD SELECTION USING EXTERNAL BENCHMARK\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
 
+# VALIDATE THAT RSF PREDICTIONS ARE WELL-CALIBRATED
 
-# PART A: VALIDATE THAT RSF PREDICTIONS ARE WELL-CALIBRATED
-
-
-cat("\n📊 CALIBRATION CHECK (Before Thresholding):\n")
+cat("\n  CALIBRATION CHECK (Before Thresholding):\n")
 
 # Check calibration by decile
 calibration_check <- under_5_current %>%
@@ -1987,13 +1978,13 @@ cat(sprintf("  Overall observed mortality: %.4f\n", obs_mortality))
 cat(sprintf("  Calibration ratio (pred/obs): %.2f\n", calibration_ratio))
 
 if(abs(calibration_ratio - 1) < 0.1) {
-  cat("  ✅ RSF model is well-calibrated (predicted ≈ observed)\n")
+  cat("  RSF model is well-calibrated (predicted ≈ observed)\n")
 } else {
-  cat("  ⚠️ Model calibration issue - proceed with caution\n")
+  cat("  Model calibration issue - proceed with caution\n")
 }
 
 
-# PART B: EXTERNAL BENCHMARK CALIBRATION
+# EXTERNAL BENCHMARK CALIBRATION
 
 
 # Define external benchmark (e.g., GBD/UN IGME estimate for 2019)
@@ -2019,9 +2010,7 @@ cat(sprintf("  DHS observed rate 2019: %.1f per 1000\n", dhs_rate_2019 * 1000))
 cat(sprintf("  Missing deaths needed: %.1f per 1000\n", missing_deaths_needed * 1000))
 cat(sprintf("  Required adjustment: +%.1f%%\n", missing_deaths_pct * 100))
 
-
-# PART C: FIND THRESHOLD THAT ACHIEVES EXTERNAL BENCHMARK
-
+#  FIND THRESHOLD THAT ACHIEVES EXTERNAL BENCHMARK
 
 # Focus on 2019 data for calibration
 calibration_year <- 2019
@@ -2029,13 +2018,13 @@ calibration_data <- under_5_current %>%
   filter(birth_year == calibration_year, b5 == 0)  # Censored children only
 
 if(nrow(calibration_data) < 10) {
-  cat("\n⚠️ Insufficient data for", calibration_year, "- using nearest year\n")
+  cat("\n Insufficient data for", calibration_year, "- using nearest year\n")
   calibration_year <- 2018
   calibration_data <- under_5_current %>%
     filter(birth_year == calibration_year, b5 == 0)
 }
 
-cat(sprintf("\n📊 CALIBRATING THRESHOLD USING %d DATA:\n", calibration_year))
+cat(sprintf("\n CALIBRATING THRESHOLD USING %d DATA:\n", calibration_year))
 cat(sprintf("  Censored children in %d: %d\n", calibration_year, nrow(calibration_data)))
 
 # Calculate how many additional deaths needed in this cohort
@@ -2063,7 +2052,7 @@ if(additional_deaths_pct > 0 && additional_deaths_pct < 1) {
               additional_deaths_pct * 100, calibration_year))
 } else {
   # Fallback: use percentile-based approach
-  cat("\n  ⚠️ Using percentile-based fallback (top 5% of censored)\n")
+  cat("\n  Using percentile-based fallback (top 5% of censored)\n")
   calibrated_threshold <- quantile(
     calibration_data$pred_risk, 
     probs = 0.95,
@@ -2072,11 +2061,9 @@ if(additional_deaths_pct > 0 && additional_deaths_pct < 1) {
   additional_deaths_pct <- 0.05
 }
 
+# VALIDATE THRESHOLD ACROSS YEARS
 
-# PART D: VALIDATE THRESHOLD ACROSS YEARS
-
-
-cat("\n📊 THRESHOLD VALIDATION ACROSS YEARS:\n")
+cat("\n THRESHOLD VALIDATION ACROSS YEARS:\n")
 
 # Test the calibrated threshold on all years
 threshold_validation <- under_5_current %>%
@@ -2100,30 +2087,25 @@ print(threshold_validation)
 threshold_stability <- sd(threshold_validation$pct_above) / mean(threshold_validation$pct_above)
 cat(sprintf("\n  Threshold stability (CV): %.2f\n", threshold_stability))
 if(threshold_stability < 0.3) {
-  cat("  ✅ Threshold relatively stable across years\n")
+  cat("  hreshold relatively stable across years\n")
 } else {
-  cat("  ⚠️ Threshold varies substantially - consider year-specific thresholds\n")
+  cat("  Threshold varies substantially - consider year-specific thresholds\n")
 }
 
-
-# PART E: COMPARE WITH YOUDEN'S J (FOR REFERENCE ONLY)
-
-
+# COMPARE WITH YOUDEN'S J (FOR REFERENCE ONLY)
 # Calculate Youden's J for comparison (but don't use it)
 roc_data <- under_5_current %>% filter(!is.na(b5))
 roc_obj <- roc(roc_data$b5, roc_data$pred_risk, quiet = TRUE)
 youden_threshold <- coords(roc_obj, "best", ret = "threshold", best.method = "youden")$threshold[1]
 youden_pct <- 100 * mean(under_5_current$pred_risk[under_5_current$b5 == 0] >= youden_threshold, na.rm = TRUE)
 
-cat("\n📊 COMPARISON WITH YOUDEN'S J:\n")
+cat("\n COMPARISON WITH YOUDEN'S J:\n")
 cat(sprintf("  Youden's J threshold: %.4f\n", youden_threshold))
 cat(sprintf("  Would classify: %.1f%% of censored as deaths\n", youden_pct))
 cat(sprintf("  Calibrated threshold: %.4f\n", calibrated_threshold))
 cat(sprintf("  Classifies: %.1f%% of censored as deaths\n", additional_deaths_pct * 100))
 
-
-# PART F: APPLY CALIBRATED THRESHOLD
-
+# APPLY CALIBRATED THRESHOLD
 
 # Use calibrated threshold
 optimal_threshold <- calibrated_threshold
@@ -2132,7 +2114,7 @@ optimal_threshold <- calibrated_threshold
 perf <- coords(roc_obj, optimal_threshold, 
                ret = c("sensitivity", "specificity", "ppv", "npv", "accuracy"))
 
-cat("\n📊 PERFORMANCE AT CALIBRATED THRESHOLD:\n")
+cat("\n PERFORMANCE AT CALIBRATED THRESHOLD:\n")
 cat(sprintf("  Sensitivity: %.1f%%\n", 100 * perf$sensitivity))
 cat(sprintf("  Specificity: %.1f%%\n", 100 * perf$specificity))
 cat(sprintf("  PPV: %.1f%%\n", 100 * perf$ppv))
@@ -2150,22 +2132,19 @@ verification <- under_5_current %>%
     n = n()
   )
 
-cat("\n📊 VERIFICATION FOR 2019:\n")
+cat("\n VERIFICATION FOR 2019:\n")
 cat(sprintf("  Original DHS rate: %.1f per 1000\n", verification$original_rate))
 cat(sprintf("  Adjusted rate: %.1f per 1000\n", verification$adjusted_rate))
 cat(sprintf("  Target external rate: %.1f per 1000\n", external_u5mr_2019))
 
 if(abs(verification$adjusted_rate - external_u5mr_2019) < 10) {
-  cat("  ✅ Calibration successful - adjusted rate matches external benchmark\n")
+  cat("alibration successful - adjusted rate matches external benchmark\n")
 } else {
-  cat("  ⚠️ Calibration off - consider iterative adjustment\n")
+  cat("Calibration off - consider iterative adjustment\n")
 }
 
 
-# PART G: SENSITIVITY ANALYSIS AROUND CALIBRATED THRESHOLD
-
-
-cat("\n📊 SENSITIVITY ANALYSIS:\n")
+# SENSITIVITY ANALYSIS AROUND CALIBRATED THRESHOLD
 
 # Test thresholds around calibrated value
 sensitivity_range <- seq(
@@ -2245,23 +2224,14 @@ calibrate_threshold_to_benchmark <- function(data, benchmark_year, benchmark_rat
 ```
 
 ```{r step47}
-# STEP 7: IDENTIFY PREDICTED DEATHS AMONG CENSORED
+# IDENTIFY PREDICTED DEATHS AMONG CENSORED
 
-
-cat("\n", paste(rep("═", 70), collapse = ""), "\n")
-cat("STEP 7: IDENTIFYING PREDICTED DEATHS AMONG CENSORED\n")
-cat(paste(rep("═", 70), collapse = ""), "\n")
 
 censored_children <- under_5_current %>% filter(b5 == 0)
 predicted_deaths <- censored_children %>% filter(pred_death == 1)
 
 n_predicted <- nrow(predicted_deaths)
 pct_censored <- 100 * n_predicted / nrow(censored_children)
-
-cat("\n📊 PREDICTED DEATHS AMONG CENSORED:\n")
-cat(sprintf("  Censored children: %d\n", nrow(censored_children)))
-cat(sprintf("  Predicted to die by age 5: %d (%.1f%% of censored)\n", 
-            n_predicted, pct_censored))
 
 # By cohort
 pred_by_cohort <- censored_children %>%
@@ -2273,28 +2243,16 @@ pred_by_cohort <- censored_children %>%
     Mean_Risk = mean(pred_risk),
     .groups = 'drop'
   )
-
-cat("\n📊 PREDICTED DEATHS BY COHORT:\n")
 print(pred_by_cohort)
 
 
 ```
 
 ```{r step48}
-# STEP 8: CREATE ADJUSTED MORTALITY VARIABLE WITH PREDICTIONS
+# CREATE ADJUSTED MORTALITY VARIABLE WITH PREDICTIONS
 # (CORRECTED VERSION - No row multiplication)
-
-cat("\n", paste(rep("═", 70), collapse = ""), "\n")
-cat("STEP 8: CREATING ADJUSTED MORTALITY ESTIMATES\n")
-cat(paste(rep("═", 70), collapse = ""), "\n")
-
 # Start with original filtered dataset (89,069 children, 2000-2019 only)
 final_data <- cens_2000_2019
-
-cat("\n📊 BEFORE MERGE:\n")
-cat(sprintf("  Final data rows: %d\n", nrow(final_data)))
-cat(sprintf("  Under-5 predictions: %d\n", nrow(under_5_current)))
-
 # FIX: Add DISTINCT to remove duplicates in prediction data
 predictions_unique <- under_5_current %>%
   # Create a unique identifier if not already present
@@ -2312,9 +2270,9 @@ duplicates_check <- predictions_unique %>%
   filter(n > 1)
 
 if(nrow(duplicates_check) > 0) {
-  cat("⚠️ Warning: Still found", nrow(duplicates_check), "duplicate key combinations\n")
+  cat("Warning: Still found", nrow(duplicates_check), "duplicate key combinations\n")
 } else {
-  cat("✅ No duplicate keys - safe to merge\n")
+  cat(" duplicate keys - safe to merge\n")
 }
 
 # Merge predictions (NOW using distinct data)
@@ -2325,19 +2283,6 @@ final_data <- final_data %>%
     by = c("b7", "b19", "birth_year", "Clu_id"),
     relationship = "many-to-one"  # Explicitly state expected relationship
   )
-
-# VALIDATION: Check that rows didn't multiply
-cat("\n📊 AFTER MERGE VALIDATION:\n")
-cat(sprintf("  Final data rows: %d\n", nrow(final_data)))
-cat(sprintf("  Original data rows: %d\n", nrow(cens_2000_2019)))
-
-if(nrow(final_data) == nrow(cens_2000_2019)) {
-  cat("✅ SUCCESS: Row count preserved (no multiplication)\n")
-} else {
-  cat("❌ ERROR: Row count changed from", nrow(cens_2000_2019), 
-      "to", nrow(final_data), "\n")
-  stop("Merge failed - check for duplicates in key variables")
-}
 
 # Check how many predictions were successfully merged
 predictions_merged <- sum(!is.na(final_data$pred_survival))
@@ -2354,14 +2299,6 @@ orig_deaths <- sum(final_data$b5_original == 1, na.rm = TRUE)
 adj_deaths <- sum(final_data$b5_adjusted == 1, na.rm = TRUE)
 orig_rate <- 100 * mean(final_data$b5_original == 1, na.rm = TRUE)
 adj_rate <- 100 * mean(final_data$b5_adjusted == 1, na.rm = TRUE)
-
-cat("\n📊 OVERALL ADJUSTMENT IMPACT:\n")
-cat(sprintf("  Original deaths: %d (%.1f%%)\n", orig_deaths, orig_rate))
-cat(sprintf("  Adjusted deaths: %d (%.1f%%)\n", adj_deaths, adj_rate))
-cat(sprintf("  Additional deaths identified: %d\n", adj_deaths - orig_deaths))
-cat(sprintf("  Relative increase: %.1f%%\n", 
-            100 * (adj_rate - orig_rate) / orig_rate))
-
 # VALIDATION 8.2: Adjustment by cohort
 adjustment_by_cohort <- final_data %>%
   group_by(birth_cohort) %>%
@@ -2378,8 +2315,6 @@ adjustment_by_cohort <- final_data %>%
     Rate_Change = Adjusted_Rate - Original_Rate,
     Pct_Increase = 100 * (Adjusted_Rate - Original_Rate) / Original_Rate
   )
-
-cat("\n📊 ADJUSTMENT BY BIRTH COHORT:\n")
 print(adjustment_by_cohort)
 
 # Save the corrected dataset
@@ -2387,12 +2322,10 @@ saveRDS(final_data, paste0(CENSOR_CENSOR_DIR, "final_data_corrected.rds"), compr
 if(!FAST_MODE) {
   write.csv(final_data, paste0(CENSOR_CENSOR_DIR, "final_data_corrected.csv"), row.names = FALSE)
 }
-
-cat("\n✅ Corrected final data saved with", nrow(final_data), "rows (2000-2019 only)\n")
 ```
 
 ```{r step49}
-# STEP 10: SAVE FINAL DATASETS
+#  SAVE FINAL DATASETS
 cat("\n", paste(rep("═", 70), collapse = ""), "\n")
 cat("STEP 10: SAVING FINAL DATASETS\n")
 cat(paste(rep("═", 70), collapse = ""), "\n")
@@ -2407,9 +2340,6 @@ if(!FAST_MODE) {
             paste0(CENSOR_CENSOR_DIR, "final_data_optimized.csv"), 
             row.names = FALSE)
 }
-
-cat("\n✅ Files saved:\n")
-cat("  - final_data_optimized.rds (R binary format)\n")
 if(!FAST_MODE) cat("  - final_data_optimized.csv (CSV format)\n")
 cat(sprintf("\n  Final dataset: %d children\n", nrow(final_data)))
 ```
@@ -2441,10 +2371,7 @@ cat("========================================================\n\n")
 sessionInfo()
 sink()
 
-cat("\n✅ Session info saved to:", paste0(CENSOR_CENSOR_DIR, "session_info.txt"), "\n")
-cat("\n========================================================\n")
-cat("🎯 ANALYSIS COMPLETE - READY FOR BAYESIAN MODELING\n")
-cat("========================================================\n")
+
 ```
 
 
